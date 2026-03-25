@@ -1,0 +1,1295 @@
+[
+    {
+        "id": "flow_main",
+        "type": "tab",
+        "label": "PV 监控完整流程",
+        "disabled": false,
+        "info": "光伏设备数据采集、验证、存储、告警和聚合分析"
+    },
+    {
+        "id": "openmeteo_tab",
+        "type": "tab",
+        "label": "Solar Irradiance (Open-Meteo)",
+        "disabled": false,
+        "info": "Open-Meteo 免费太阳辐照度数据接入\n每30分钟自动拉取实时+预测数据写入 InfluxDB\n替代 Solcast（免费，无需 API Key）"
+    },
+    {
+        "id": "flow_remote_control",
+        "type": "tab",
+        "label": "远程控制",
+        "disabled": false,
+        "info": "通过 Dashboard 远程控制断路器开合闸"
+    },
+    {
+        "id": "flow_device_registry",
+        "type": "tab",
+        "label": "设备注册表",
+        "disabled": false,
+        "info": "PostgreSQL 设备注册表同步流程\n每5分钟从数据库读取活跃设备列表，同步到 global context\n供辐照度采集和主管道使用"
+    },
+    {
+        "id": "emqx_broker",
+        "type": "mqtt-broker",
+        "name": "broker.emqx.io Public",
+        "broker": "broker.emqx.io",
+        "port": "1883",
+        "clientid": "nodered_subscriber_001",
+        "autoConnect": true,
+        "usetls": false,
+        "protocolVersion": "4",
+        "keepalive": "60",
+        "cleansession": true,
+        "autoUnsubscribe": true,
+        "birthTopic": "",
+        "birthQos": "0",
+        "birthPayload": "",
+        "birthMsg": {},
+        "closeTopic": "",
+        "closeQos": "0",
+        "closePayload": "",
+        "closeMsg": {},
+        "willTopic": "",
+        "willQos": "0",
+        "willPayload": "",
+        "willMsg": {},
+        "userProps": "",
+        "sessionExpiry": ""
+    },
+    {
+        "id": "influxdb_server",
+        "type": "influxdb",
+        "hostname": "influxdb",
+        "port": "8086",
+        "protocol": "http",
+        "database": "pv_data",
+        "name": "InfluxDB-PV",
+        "usetls": false,
+        "tls": "",
+        "influxdbVersion": "2.0",
+        "url": "http://influxdb:8086",
+        "timeout": "",
+        "rejectUnauthorized": false
+    },
+    {
+        "id": "influxdb_config_openmeteo",
+        "type": "influxdb",
+        "hostname": "influxdb",
+        "port": "8086",
+        "protocol": "http",
+        "database": "pv_data",
+        "name": "InfluxDB-OpenMeteo",
+        "usetls": false,
+        "tls": "",
+        "influxdbVersion": "2.0",
+        "url": "http://influxdb:8086",
+        "timeout": "",
+        "rejectUnauthorized": false
+    },
+    {
+        "id": "43b4400bd65824f6",
+        "type": "ui_base",
+        "theme": {
+            "name": "theme-light",
+            "lightTheme": {
+                "default": "#0094CE",
+                "baseColor": "#0094CE",
+                "baseFont": "-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Oxygen-Sans,Ubuntu,Cantarell,Helvetica Neue,sans-serif",
+                "edited": true,
+                "reset": false
+            },
+            "darkTheme": {
+                "default": "#097479",
+                "baseColor": "#097479",
+                "baseFont": "-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Oxygen-Sans,Ubuntu,Cantarell,Helvetica Neue,sans-serif",
+                "edited": false
+            },
+            "customTheme": {
+                "name": "Untitled Theme 1",
+                "default": "#4B7930",
+                "baseColor": "#4B7930",
+                "baseFont": "-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Oxygen-Sans,Ubuntu,Cantarell,Helvetica Neue,sans-serif"
+            },
+            "themeState": {
+                "base-color": {
+                    "default": "#0094CE",
+                    "value": "#0094CE",
+                    "edited": false
+                },
+                "page-titlebar-backgroundColor": {
+                    "value": "#0094CE",
+                    "edited": false
+                },
+                "page-backgroundColor": {
+                    "value": "#fafafa",
+                    "edited": false
+                },
+                "page-sidebar-backgroundColor": {
+                    "value": "#ffffff",
+                    "edited": false
+                },
+                "group-textColor": {
+                    "value": "#1bbfff",
+                    "edited": false
+                },
+                "group-borderColor": {
+                    "value": "#ffffff",
+                    "edited": false
+                },
+                "group-backgroundColor": {
+                    "value": "#ffffff",
+                    "edited": false
+                },
+                "widget-textColor": {
+                    "value": "#111111",
+                    "edited": false
+                },
+                "widget-backgroundColor": {
+                    "value": "#0094ce",
+                    "edited": false
+                },
+                "widget-borderColor": {
+                    "value": "#ffffff",
+                    "edited": false
+                },
+                "base-font": {
+                    "value": "-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Oxygen-Sans,Ubuntu,Cantarell,Helvetica Neue,sans-serif"
+                }
+            },
+            "angularTheme": {
+                "primary": "indigo",
+                "accents": "blue",
+                "warn": "red",
+                "background": "grey",
+                "palette": "light"
+            }
+        },
+        "site": {
+            "name": "Node-RED Dashboard",
+            "hideToolbar": "false",
+            "allowSwipe": "false",
+            "lockMenu": "false",
+            "allowTempTheme": "true",
+            "dateFormat": "DD/MM/YYYY",
+            "sizes": {
+                "sx": 48,
+                "sy": 48,
+                "gx": 6,
+                "gy": 6,
+                "cx": 6,
+                "cy": 6,
+                "px": 0,
+                "py": 0
+            }
+        }
+    },
+    {
+        "id": "dashboard_tab_control",
+        "type": "ui_tab",
+        "name": "控制面板",
+        "icon": "dashboard",
+        "order": 1,
+        "disabled": false,
+        "hidden": false
+    },
+    {
+        "id": "dashboard_group_control",
+        "type": "ui_group",
+        "name": "远程控制",
+        "tab": "dashboard_tab_control",
+        "order": 1,
+        "disp": true,
+        "width": "6",
+        "collapse": false
+    },
+    {
+        "id": "dashboard_group_status",
+        "type": "ui_group",
+        "name": "控制状态",
+        "tab": "dashboard_tab_control",
+        "order": 2,
+        "disp": true,
+        "width": "6",
+        "collapse": false
+    },
+    {
+        "id": "pg_config_pv",
+        "type": "postgreSQLConfig",
+        "name": "PV-PostgreSQL",
+        "host": "postgres",
+        "hostFieldType": "str",
+        "port": "5432",
+        "portFieldType": "num",
+        "database": "pv_system",
+        "databaseFieldType": "str",
+        "ssl": "false",
+        "sslFieldType": "bool",
+        "applicationName": "",
+        "applicationNameType": "str",
+        "max": "10",
+        "maxFieldType": "num",
+        "idle": "1000",
+        "idleFieldType": "num",
+        "connectionTimeout": "10000",
+        "connectionTimeoutFieldType": "num",
+        "user": "admin",
+        "userFieldType": "str",
+        "password": "admin123456",
+        "passwordFieldType": "str"
+    },
+    {
+        "id": "mqtt_in",
+        "type": "mqtt in",
+        "z": "flow_main",
+        "name": "接收光伏数据",
+        "topic": "pv/+/data",
+        "qos": "1",
+        "datatype": "json",
+        "broker": "emqx_broker",
+        "nl": false,
+        "rap": true,
+        "rh": 0,
+        "inputs": 0,
+        "x": 280,
+        "y": 160,
+        "wires": [
+            [
+                "debug_raw",
+                "validate_transform"
+            ]
+        ]
+    },
+    {
+        "id": "debug_raw",
+        "type": "debug",
+        "z": "flow_main",
+        "name": "原始消息",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 480,
+        "y": 80,
+        "wires": []
+    },
+    {
+        "id": "validate_transform",
+        "type": "function",
+        "z": "flow_main",
+        "name": "Validate & Transform",
+        "func": "// ============================================================\n// 断路器数据验证与转换 (V4.2 - 修复 sim_fault tag 导致双线问题)\n// ============================================================\n\nconst payload = msg.payload;\n\n// 1. 提取设备 ID (优先从 Topic 提取: pv/device_001/data)\nconst topic_parts = (msg.topic || \"\").split('/');\nlet device_id = (topic_parts.length >= 2) ? topic_parts[1] : (payload.device_id || 'unknown');\n\n// 2. 基本格式校验\nif (!payload || typeof payload !== 'object') {\n    node.error(\"Invalid payload format\", msg);\n    return null;\n}\n\n// 3. 必需字段检查\nconst required_fields = ['voltage', 'current', 'power', 'status', 'temperature'];\nfor (let field of required_fields) {\n    if (payload[field] === undefined) {\n        node.warn(`Missing required field: ${field}`);\n        return null;\n    }\n}\n\n// 4. 时间戳处理 (Unix秒 -> JS Date)\nlet ts;\nconst rawTs = Number(payload.timestamp);\nif (!isNaN(rawTs) && rawTs > 0) {\n    ts = new Date(rawTs < 10000000000 ? rawTs * 1000 : rawTs);\n} else {\n    ts = new Date();\n}\n\n// ============================================================\n// 5. 核心：标准数组格式 [fields, tags]\n//    注意：tags 只保留 device_id，不放 sim_fault\n//    sim 相关字段全部放 fields，避免产生多条时间序列\n// ============================================================\n\nconst fields = {\n    // 基础电气参数（真实 + 模拟都有）\n    voltage: parseFloat(Number(payload.voltage).toFixed(2)),\n    current: parseFloat(Number(payload.current).toFixed(3)),\n    power: parseFloat(Number(payload.power).toFixed(2)),\n    efficiency: parseFloat(Number(payload.efficiency || 0.5).toFixed(2)),\n    temperature: parseFloat(Number(payload.temperature).toFixed(2)),\n    status: (payload.status === true || payload.status === 1) ? 1.0 : 0.0\n};\n\n// 模拟器专属字段（真实设备没有，不会写入）\nif (payload.sim_ghi !== undefined) fields.sim_ghi = parseFloat(payload.sim_ghi);\nif (payload.sim_k !== undefined) fields.sim_k = parseFloat(payload.sim_k);\nif (payload.sim_pr !== undefined) fields.sim_pr = parseFloat(payload.sim_pr);\n\n// sim_fault 用数字编码放进 fields（不放 tags！）\nif (payload.sim_fault !== undefined) {\n    const fault_code = { 'severe': 3, 'degraded': 2, 'normal': 0 };\n    fields.sim_fault_code = fault_code[payload.sim_fault] || 0;\n}\n\n// 地理坐标\nif (payload.latitude !== undefined) fields.latitude = parseFloat(payload.latitude);\nif (payload.longitude !== undefined) fields.longitude = parseFloat(payload.longitude);\n\n// tags: device_id + region（从注册表读）\nconst registry = global.get('device_registry') || {};\nconst deviceInfo = registry[String(device_id)];\n\nconst tags = {\n    device_id: String(device_id),\n    region: (deviceInfo && deviceInfo.location) ? deviceInfo.location.toLowerCase() : \"unknown\"\n};\nmsg.payload = [fields, tags];\n\n// ============================================================\n\n// 6. 传递原始数据供下游节点使用\nmsg.device_id = device_id;\nmsg.raw = payload;\n\nreturn msg;",
+        "outputs": 2,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 520,
+        "y": 160,
+        "wires": [
+            [
+                "debug_validated",
+                "detect_anomalies",
+                "79e49c342cf7812f"
+            ],
+            [
+                "error_handler"
+            ]
+        ]
+    },
+    {
+        "id": "debug_validated",
+        "type": "debug",
+        "z": "flow_main",
+        "name": "处理后的数据",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 760,
+        "y": 60,
+        "wires": []
+    },
+    {
+        "id": "influx_write",
+        "type": "influxdb out",
+        "z": "flow_main",
+        "influxdb": "influxdb_server",
+        "name": "写入InfluxDB",
+        "measurement": "breaker_data",
+        "precision": "",
+        "retentionPolicy": "",
+        "database": "",
+        "precisionV18FluxV20": "ms",
+        "retentionPolicyV18Flux": "",
+        "org": "pv-monitoring",
+        "bucket": "pv_data",
+        "x": 1090,
+        "y": 140,
+        "wires": []
+    },
+    {
+        "id": "detect_anomalies",
+        "type": "function",
+        "z": "flow_main",
+        "name": "Detect Anomalies",
+        "func": "// ============================================================\n// 异常检测 v4.0 — PR 性能比 + 数据库注册表 + 30分钟冷却\n//\n// k 值和设备信息从 global.device_registry 读取（来源：PostgreSQL）\n// GHI 从 global.ghi_map 按坐标就近匹配\n// ============================================================\n\nconst payload = msg.raw;\nconst device_id = msg.device_id;\n\n// ========== 从数据库注册表获取设备信息 ==========\nconst registry = global.get('device_registry') || {};\nconst dev_info = registry[device_id];\nconst is_real = dev_info !== undefined;\n\n// ========== 获取 GHI 和 k ==========\nlet ghi, k;\n\nif (is_real) {\n    k = dev_info.k || 0.15;\n    ghi = getDeviceGHI(device_id, dev_info);\n} else {\n    k = payload.sim_k || 0.10;\n    ghi = payload.sim_ghi || global.get('latest_ghi') || 0;\n}\n\n// 低辐照度不做告警判定\nif (ghi <= 50) {\n    node.status({ fill: 'grey', shape: 'ring', text: `${device_id}: 低辐照跳过 GHI=${ghi}` });\n    return null;\n}\n\n// ========== 计算 PR ==========\nconst p_theoretical = k * ghi;\nconst pr = payload.power / p_theoretical;\n\n// ========== PR 阈值判定 ==========\nlet alert = null;\n\nif (pr < 0.3) {\n    alert = {\n        level: 'critical',\n        rule: 'PR_SEVERE',\n        device_id: device_id,\n        message: `严重偏离！PR=${(pr*100).toFixed(1)}% | 实际${payload.power.toFixed(1)}W / 理论${p_theoretical.toFixed(1)}W | GHI=${ghi}`,\n        detail: '面板遮挡 / 逆变器故障 / 断路器跳闸 / 线缆断路',\n        pr: pr,\n        power: payload.power,\n        p_theoretical: p_theoretical,\n        ghi: ghi,\n        timestamp: new Date()\n    };\n} else if (pr < 0.7) {\n    alert = {\n        level: 'warning',\n        rule: 'PR_LOW',\n        device_id: device_id,\n        message: `性能偏低 PR=${(pr*100).toFixed(1)}% | 实际${payload.power.toFixed(1)}W / 理论${p_theoretical.toFixed(1)}W | GHI=${ghi}`,\n        detail: '积灰 / 部分遮挡 / 逆变器效率下降',\n        pr: pr,\n        power: payload.power,\n        p_theoretical: p_theoretical,\n        ghi: ghi,\n        timestamp: new Date()\n    };\n} else if (pr > 1.3) {\n    alert = {\n        level: 'warning',\n        rule: 'PR_HIGH',\n        device_id: device_id,\n        message: `PR异常偏高 ${(pr*100).toFixed(1)}% | 实际${payload.power.toFixed(1)}W / 理论${p_theoretical.toFixed(1)}W | GHI=${ghi}`,\n        detail: '辐照度传感器偏低 / 功率计偏高 / k值需要重新校准',\n        pr: pr,\n        power: payload.power,\n        p_theoretical: p_theoretical,\n        ghi: ghi,\n        timestamp: new Date()\n    };\n}\n\n// ========== 冷却限流：同设备同规则，30分钟内只报一次 ==========\nif (alert) {\n    const cooldown_key = `cd_${device_id}_${alert.rule}`;\n    const last_alert = context.get(cooldown_key) || 0;\n    const now = Date.now();\n\n    if (now - last_alert < 30 * 60 * 1000) {\n        node.status({ fill: 'grey', shape: 'ring', text: `${device_id}: 告警冷却中 (${alert.rule})` });\n        return null;\n    }\n    context.set(cooldown_key, now);\n\n    msg.payload = [\n        {\n            message: alert.message,\n            detail: alert.detail,\n            level_code: alert.level === 'critical' ? 3 : 2,\n            pr: parseFloat(pr.toFixed(3)),\n            power: payload.power,\n            p_theoretical: parseFloat(p_theoretical.toFixed(1)),\n            ghi: ghi\n        },\n        {\n            device_id: device_id,\n            level: alert.level,\n            rule: alert.rule\n        }\n    ];\n\n    const color = alert.level === 'critical' ? 'red' : 'yellow';\n    node.status({ fill: color, shape: 'ring', text: `${device_id}: PR=${(pr*100).toFixed(0)}% ${alert.rule}` });\n    return msg;\n}\n\nnode.status({ fill: 'green', shape: 'dot', text: `${device_id}: 正常 PR=${(pr*100).toFixed(0)}%` });\nreturn null;\n\n// ========== 辅助函数 ==========\nfunction getDeviceGHI(dev_id, info) {\n    const ghi_map = global.get('ghi_map') || {};\n\n    // 1. 找设备专属 GHI\n    if (ghi_map[dev_id]) return ghi_map[dev_id].ghi;\n\n    // 2. 按坐标找最近网格点\n    if (info && info.lat && info.lon) {\n        let min_dist = Infinity;\n        let nearest = 0;\n        for (const [id, g] of Object.entries(ghi_map)) {\n            const d = (g.lat - info.lat) ** 2 + (g.lon - info.lon) ** 2;\n            if (d < min_dist) { min_dist = d; nearest = g.ghi; }\n        }\n        if (nearest > 0) return nearest;\n    }\n\n    // 3. 全局回退\n    return global.get('latest_ghi') || 0;\n}",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 790,
+        "y": 220,
+        "wires": [
+            [
+                "alert_notification",
+                "44ec360af41050d7"
+            ]
+        ]
+    },
+    {
+        "id": "alert_notification",
+        "type": "debug",
+        "z": "flow_main",
+        "name": "告警通知中心",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 1020,
+        "y": 200,
+        "wires": []
+    },
+    {
+        "id": "error_handler",
+        "type": "function",
+        "z": "flow_main",
+        "name": "Error Handler",
+        "func": "// 捕获上游节点的错误信息\nconst error_info = {\n    timestamp: new Date().toISOString(),\n    error: msg.error ? msg.error.message : 'Unknown error',\n    topic: msg.topic || 'unknown',\n    payload: msg.payload || null\n};\n\n// 输出到错误日志 debug 节点\nmsg.payload = error_info;\n\n// 如果有写入错误日志的 InfluxDB 节点\nmsg.influx_data = {\n    measurement: 'error_log',\n    tags: { source: 'node-red' },\n    fields: {\n        error_message: error_info.error,\n        topic: error_info.topic\n    },\n    timestamp: new Date()\n};\n\nnode.warn(`Error caught: ${error_info.error}`);\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 760,
+        "y": 320,
+        "wires": [
+            [
+                "debug_errors",
+                "influx_error_log"
+            ]
+        ]
+    },
+    {
+        "id": "debug_errors",
+        "type": "debug",
+        "z": "flow_main",
+        "name": "错误日志",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "error_summary",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 980,
+        "y": 340,
+        "wires": []
+    },
+    {
+        "id": "influx_error_log",
+        "type": "influxdb out",
+        "z": "flow_main",
+        "influxdb": "influxdb_server",
+        "name": "写入错误日志",
+        "measurement": "",
+        "precision": "",
+        "retentionPolicy": "",
+        "database": "",
+        "precisionV18FluxV20": "ms",
+        "retentionPolicyV18Flux": "",
+        "org": "pv-monitoring",
+        "bucket": "pv_data",
+        "x": 980,
+        "y": 400,
+        "wires": []
+    },
+    {
+        "id": "79e49c342cf7812f",
+        "type": "function",
+        "z": "flow_main",
+        "name": "Enrich with Location",
+        "func": "const registry = global.get('device_registry') || {};\nconst device_id = msg.device_id;\nconst deviceInfo = registry[String(device_id)];\n\nif (deviceInfo) {\n    msg.payload[1].region    = deviceInfo.location ? deviceInfo.location.toLowerCase() : \"unknown\";\n    msg.payload[1].latitude  = String(deviceInfo.lat);\n    msg.payload[1].longitude = String(deviceInfo.lon);\n} else if (msg.raw && msg.raw.latitude && msg.raw.longitude) {\n    msg.payload[1].latitude  = String(msg.raw.latitude);\n    msg.payload[1].longitude = String(msg.raw.longitude);\n    msg.payload[1].region    = \"simulated\";\n}\n\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 800,
+        "y": 140,
+        "wires": [
+            [
+                "influx_write",
+                "9288ca7884a61afd"
+            ]
+        ]
+    },
+    {
+        "id": "b28c0363e3e2bfdd",
+        "type": "inject",
+        "z": "flow_main",
+        "name": "1min执行一次",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "10",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 140,
+        "y": 280,
+        "wires": [
+            [
+                "e34adf67459a1026"
+            ]
+        ]
+    },
+    {
+        "id": "e34adf67459a1026",
+        "type": "function",
+        "z": "flow_main",
+        "name": "全岛批量模拟",
+        "func": "// ============================================================\n// 全岛批量模拟器 v4.4 — 云层持续性 + 紧贴k线 + 低频故障\n// ============================================================\n\n// ========== 从注册表读取模拟设备 ==========\nconst registry = global.get('device_registry') || {};\nconst sim_devices = Object.entries(registry)\n    .filter(([id, info]) => info.device_type === 'simulated' && info.status === 'active')\n    .map(([id, info]) => ({\n        id: id,\n        lat: info.lat,\n        lon: info.lon,\n        k: info.k || 0.15,\n        orientation_factor: parseFloat((0.93 + Math.random() * 0.05).toFixed(3))\n    }));\n\nif (sim_devices.length === 0) {\n    node.status({ fill: 'red', shape: 'ring', text: 'No simulated devices in registry' });\n    return null;\n}\n\n// ========== 故障状态机 ==========\nlet fault_states = flow.get('sim_fault_states') || {};\nconst now = Date.now();\n\nfor (const dev of sim_devices) {\n    if (!fault_states[dev.id]) {\n        fault_states[dev.id] = { state: 'normal', start: 0, duration: 0 };\n    }\n    const fs = fault_states[dev.id];\n    if (fs.state !== 'normal' && now > fs.start + fs.duration) {\n        fs.state = 'normal';\n        fs.start = 0;\n        fs.duration = 0;\n    }\n}\n\n// ========== 云层持续性状态机 ==========\nlet cloud_states = flow.get('sim_cloud_states') || {};\nfor (const dev of sim_devices) {\n    if (!cloud_states[dev.id] || now > (cloud_states[dev.id].until || 0)) {\n        const r = Math.random();\n        let cloud, duration;\n        if (r < 0.03) {\n            cloud = 0.45 + Math.random() * 0.15;\n            duration = (30 + Math.random() * 30) * 60 * 1000;\n        } else if (r < 0.15) {\n            cloud = 0.72 + Math.random() * 0.13;\n            duration = (20 + Math.random() * 20) * 60 * 1000;\n        } else {\n            cloud = 0.95 + Math.random() * 0.05;\n            duration = (60 + Math.random() * 120) * 60 * 1000;\n        }\n        cloud_states[dev.id] = { factor: cloud, until: now + duration };\n    }\n}\nflow.set('sim_cloud_states', cloud_states);\n\n// ========== GHI 相关 ==========\nconst base_ghi = global.get('latest_ghi') || 0;\nconst air_temp = global.get('latest_air_temp') || 25;\nconst is_night = base_ghi < 10;\nconst ghi_map = global.get('ghi_map') || {};\n\nfunction getNearestGHI(lat, lon) {\n    let min_dist = Infinity;\n    let nearest_ghi = base_ghi;\n    for (const [id, info] of Object.entries(ghi_map)) {\n        const dlat = info.lat - lat;\n        const dlon = info.lon - lon;\n        const dist = dlat * dlat + dlon * dlon;\n        if (dist < min_dist) {\n            min_dist = dist;\n            nearest_ghi = info.ghi || 0;\n        }\n    }\n    return nearest_ghi;\n}\n\n// ========== 远程控制状态 ==========\nconst manual_off = global.get('manual_off_devices') || {};\n\n// ========== 触发故障（每类每天约1台） ==========\nlet fault_count = 0;\nlet manual_off_count = 0;\n\nfor (const dev of sim_devices) {\n    const fs = fault_states[dev.id];\n    if (!is_night && fs.state === 'normal') {\n        const rand = Math.random();\n        if (rand < 0.0000333) {\n            // 逆变器故障：50台中约每天1台，持续20~30分钟\n            fs.state = 'inverter_fault';\n            fs.start = now;\n            fs.duration = (20 + Math.random() * 10) * 60 * 1000;\n        } else if (rand < 0.0000667) {\n            // 灰尘积累：50台中约每天1台，持续30~40分钟\n            fs.state = 'dusty';\n            fs.start = now;\n            fs.duration = (30 + Math.random() * 10) * 60 * 1000;\n        } else if (rand < 0.0001) {\n            // 遮挡：50台中约每天1台，持续20~30分钟\n            fs.state = 'shaded';\n            fs.start = now;\n            fs.duration = (20 + Math.random() * 10) * 60 * 1000;\n        }\n    }\n}\n\nflow.set('sim_fault_states', fault_states);\n\n// ========== 生成数据 ==========\nlet messages = [];\n\nfor (const dev of sim_devices) {\n    const fs = fault_states[dev.id];\n    let local_ghi, pr, fault_type, power;\n\n    // GHI + 微波动 ±3%\n    const raw_ghi = getNearestGHI(dev.lat, dev.lon);\n    const device_base_ghi = raw_ghi * (0.97 + Math.random() * 0.06);\n\n    const is_manual_off = manual_off[dev.id] === true;\n\n    if (is_manual_off) {\n        local_ghi = is_night ? 0 : device_base_ghi * 0.95;\n        pr = 0; power = 0; fault_type = 'manual_off';\n        manual_off_count++;\n    } else if (is_night) {\n        local_ghi = 0; pr = 0; power = 0; fault_type = 'normal';\n    } else {\n        // 云层持续性 + 微波动 ±1.5%\n        local_ghi = device_base_ghi * cloud_states[dev.id].factor * (0.985 + Math.random() * 0.03);\n\n        switch (fs.state) {\n            case 'inverter_fault':\n                pr = 0.05 + Math.random() * 0.15; fault_type = 'severe'; fault_count++; break;\n            case 'dusty':\n                pr = 0.55 + Math.random() * 0.15; fault_type = 'degraded'; break;\n            case 'shaded':\n                pr = 0.20 + Math.random() * 0.25; fault_type = 'severe'; fault_count++; break;\n            default:\n                pr = 0.90 + Math.random() * 0.06; fault_type = 'normal';\n        }\n        const p_theoretical = dev.k * local_ghi * dev.orientation_factor;\n        power = Math.max(0, p_theoretical * pr);\n    }\n\n    const voltage = is_manual_off ? 0 : (230 + (Math.random() * 4 - 2));\n    const current = (is_night || is_manual_off) ? 0 : power / voltage;\n    const temperature = air_temp + (is_night ? 5 : 15) + Math.random() * 10;\n\n    messages.push({\n        payload: {\n            device_id: dev.id,\n            timestamp: Math.floor(Date.now() / 1000),\n            voltage: parseFloat(voltage.toFixed(1)),\n            current: parseFloat(current.toFixed(2)),\n            power: parseFloat(power.toFixed(1)),\n            status: !is_manual_off && fs.state !== 'inverter_fault',\n            efficiency: parseFloat(pr.toFixed(2)),\n            temperature: parseFloat(temperature.toFixed(1)),\n            latitude: dev.lat,\n            longitude: dev.lon,\n            sim_ghi: parseFloat((local_ghi || 0).toFixed(1)),\n            sim_k: dev.k,\n            sim_pr: parseFloat(pr.toFixed(3)),\n            sim_fault: fault_type\n        },\n        topic: `pv/${dev.id}/data`\n    });\n}\n\n// ========== 状态显示 ==========\nconst ghi_points = Object.keys(ghi_map).length;\nconst states = sim_devices.reduce((acc, d) => {\n    if (manual_off[d.id]) {\n        acc['manual_off'] = (acc['manual_off'] || 0) + 1;\n    } else {\n        acc[fault_states[d.id].state] = (acc[fault_states[d.id].state] || 0) + 1;\n    }\n    return acc;\n}, {});\nconst status_text = Object.entries(states).map(([k, v]) => `${k}:${v}`).join(' | ');\n\nnode.status({\n    fill: (fault_count > 0 || manual_off_count > 0) ? 'red' : (is_night ? 'grey' : 'green'),\n    shape: 'dot',\n    text: `${is_night ? '🌙' : '☀'} ${sim_devices.length}台 | ${status_text} | GHI点:${ghi_points} | ${new Date().toLocaleTimeString()}`\n});\n\nreturn [messages];",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 360,
+        "y": 280,
+        "wires": [
+            [
+                "validate_transform"
+            ]
+        ]
+    },
+    {
+        "id": "9288ca7884a61afd",
+        "type": "function",
+        "z": "flow_main",
+        "name": "合并辐照度+功率",
+        "func": "// ============================================================\n// 合并辐照度+功率 v4.0 — 每设备独立 GHI（按坐标就近匹配）\n//\n// 真实设备 → 从 ghi_map 找该设备精确坐标的 GHI\n// 模拟设备 → 用 sim_ghi（模拟器已按就近网格点生成）\n// 回退     → 如果都找不到，用 latest_ghi\n// ============================================================\n\nconst fields = msg.payload[0];\nconst tags = msg.payload[1];\n\nconst power = fields.power || 0;\nconst device_id = tags.device_id || 'unknown';\n\n// ========== 从数据库注册表获取设备信息 ==========\nconst registry = global.get('device_registry') || {};\nconst dev_info = registry[device_id];\nconst is_real = dev_info !== undefined;\n\n// ========== 获取该设备的 GHI ==========\nconst ghi_map = global.get('ghi_map') || {};\nlet ghi, air_temp, data_source, k;\n\nif (is_real) {\n    // 真实设备：从数据库获取 k 值\n    k = dev_info.k || 0.15;\n    data_source = 'api';\n\n    // GHI 优先级：设备专属 > 就近网格点 > 全局回退\n    if (ghi_map[device_id]) {\n        ghi = ghi_map[device_id].ghi;\n        air_temp = ghi_map[device_id].temp;\n    } else {\n        ghi = findNearestGHI(ghi_map, dev_info.lat, dev_info.lon);\n        air_temp = global.get('latest_air_temp') || 0;\n    }\n} else {\n    // 模拟设备：用模拟器自带的 sim_ghi 和 sim_k\n    k = fields.sim_k || 0.15;\n    data_source = 'simulator';\n\n    if (fields.sim_ghi !== undefined) {\n        ghi = fields.sim_ghi;\n    } else if (fields.latitude && fields.longitude) {\n        ghi = findNearestGHI(ghi_map, fields.latitude, fields.longitude);\n    } else {\n        ghi = global.get('latest_ghi') || 0;\n    }\n    air_temp = global.get('latest_air_temp') || 0;\n}\n\n// ========== 计算 PR ==========\nconst low_irradiance = ghi <= 50;\nconst p_theoretical = k * ghi;\nlet pr_value = -1;\nlet fault_flag = 0;\n\nif (!low_irradiance && p_theoretical > 0) {\n    pr_value = parseFloat((power / p_theoretical).toFixed(3));\n    if (pr_value < 0.3) fault_flag = 3;\n    else if (pr_value < 0.7) fault_flag = 2;\n    else if (pr_value > 1.3) fault_flag = 1;\n}\n\n// ========== 写入 InfluxDB ==========\n// 获取坐标\nlet lat, lon;\nif (is_real && dev_info) {\n    lat = dev_info.lat;\n    lon = dev_info.lon;\n} else {\n    lat = fields.latitude || 0;\n    lon = fields.longitude || 0;\n}\n\nmsg.payload = [\n    {\n        ghi: ghi,\n        power: power,\n        p_theoretical: parseFloat(p_theoretical.toFixed(1)),\n        performance_ratio: pr_value,\n        fault_flag: fault_flag,\n        k_factor: k,\n        air_temp: air_temp,\n        latitude: lat,\n        longitude: lon\n    },\n    {\n        device_id: device_id,\n        location: is_real ? (dev_info.location || \"Cyprus\") : (tags.location || \"Cyprus\"),\n        data_source: data_source,\n        device_type: is_real ? \"real\" : \"simulated\"\n    }\n];\n\n// ========== 状态显示 ==========\nconst color = low_irradiance ? 'grey' : (fault_flag >= 2 ? 'red' : 'green');\nconst pr_text = low_irradiance ? '夜间' : (pr_value * 100).toFixed(1) + '%';\nconst prefix = is_real ? '📡' : '🤖';\nnode.status({\n    fill: color, shape: 'dot',\n    text: `${prefix} ${device_id} | GHI=${ghi} | P=${power}W | PR=${pr_text}`\n});\n\nreturn msg;\n\n// ========== 辅助函数：按坐标找最近网格点的 GHI ==========\nfunction findNearestGHI(map, lat, lon) {\n    let min_dist = Infinity;\n    let nearest_ghi = global.get('latest_ghi') || 0;\n\n    for (const [id, info] of Object.entries(map)) {\n        const dlat = info.lat - lat;\n        const dlon = info.lon - lon;\n        const dist = dlat * dlat + dlon * dlon;\n        if (dist < min_dist) {\n            min_dist = dist;\n            nearest_ghi = info.ghi;\n        }\n    }\n    return nearest_ghi;\n}",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1030,
+        "y": 80,
+        "wires": [
+            [
+                "22c034a73f3ccfb7"
+            ]
+        ]
+    },
+    {
+        "id": "22c034a73f3ccfb7",
+        "type": "influxdb out",
+        "z": "flow_main",
+        "influxdb": "influxdb_server",
+        "name": "写入InfluxDB",
+        "measurement": "pv_correlation",
+        "precision": "",
+        "retentionPolicy": "",
+        "database": "database",
+        "precisionV18FluxV20": "ms",
+        "retentionPolicyV18Flux": "",
+        "org": "pv-monitoring",
+        "bucket": "pv_data",
+        "x": 1230,
+        "y": 80,
+        "wires": []
+    },
+    {
+        "id": "44ec360af41050d7",
+        "type": "influxdb out",
+        "z": "flow_main",
+        "influxdb": "influxdb_server",
+        "name": "",
+        "measurement": "alerts",
+        "precision": "",
+        "retentionPolicy": "",
+        "database": "database",
+        "precisionV18FluxV20": "ms",
+        "retentionPolicyV18Flux": "",
+        "org": "pv-monitoring",
+        "bucket": "pv_data",
+        "x": 1090,
+        "y": 260,
+        "wires": []
+    },
+    {
+        "id": "900848fb26d87de6",
+        "type": "inject",
+        "z": "flow_main",
+        "name": "",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 410,
+        "y": 560,
+        "wires": [
+            [
+                "8a1424b2f21007e7"
+            ]
+        ]
+    },
+    {
+        "id": "8a1424b2f21007e7",
+        "type": "function",
+        "z": "flow_main",
+        "name": "function 3",
+        "func": "flow.set('sim_fault_states', {});\nflow.set('sim_cloud_states', {});\nmsg.payload = \"All states cleared\";\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 600,
+        "y": 560,
+        "wires": [
+            [
+                "8f60762bf65653e0"
+            ]
+        ]
+    },
+    {
+        "id": "8f60762bf65653e0",
+        "type": "debug",
+        "z": "flow_main",
+        "name": "debug 3",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "false",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 800,
+        "y": 560,
+        "wires": []
+    },
+    {
+        "id": "openmeteo_comment",
+        "type": "comment",
+        "z": "openmeteo_tab",
+        "name": "☀️ Open-Meteo 太阳辐照度 — 免费无需Key，直接Deploy即可",
+        "info": "数据来源: Open-Meteo.com\nGHI = shortwave_radiation\nDNI = direct_normal_irradiance\nDHI = diffuse_radiation\n\n写入 InfluxDB measurement: solcast_irradiance\nGrafana 面板无需修改",
+        "x": 350,
+        "y": 40,
+        "wires": []
+    },
+    {
+        "id": "openmeteo_timer",
+        "type": "inject",
+        "z": "openmeteo_tab",
+        "name": "每10分钟 (Live)",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "60",
+        "crontab": "",
+        "once": true,
+        "onceDelay": "10",
+        "topic": "live",
+        "payload": "",
+        "payloadType": "date",
+        "x": 170,
+        "y": 340,
+        "wires": [
+            [
+                "openmeteo_build_url"
+            ]
+        ]
+    },
+    {
+        "id": "openmeteo_forecast_timer",
+        "type": "inject",
+        "z": "openmeteo_tab",
+        "name": "每6小时 (Forecast)",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "21600",
+        "crontab": "",
+        "once": true,
+        "onceDelay": "30",
+        "topic": "forecast",
+        "payload": "",
+        "payloadType": "date",
+        "x": 170,
+        "y": 420,
+        "wires": [
+            [
+                "openmeteo_build_url"
+            ]
+        ]
+    },
+    {
+        "id": "openmeteo_build_url",
+        "type": "function",
+        "z": "openmeteo_tab",
+        "name": "Build Open-Meteo URL",
+        "func": "// ============================================================\n// Open-Meteo URL 构建 v3.0 — 从 PostgreSQL 注册表读取坐标\n//\n// 读取 global.irradiance_points（由设备注册表同步流程维护）\n// 为每个坐标点发一个 HTTP 请求获取 GHI\n// ============================================================\n\nconst points = global.get('irradiance_points') || [];\n\nif (points.length === 0) {\n    node.status({ fill: 'red', shape: 'ring', text: '无采集点，等待注册表同步...' });\n    node.warn('irradiance_points 为空，请检查设备注册表同步流程');\n    return null;\n}\n\nconst BASE = 'https://api.open-meteo.com/v1/forecast';\n\nfor (const point of points) {\n    const url = `${BASE}?latitude=${point.lat}&longitude=${point.lon}`\n        + `&current=shortwave_radiation,temperature_2m,cloud_cover`\n        + `&timezone=auto`;\n\n    node.send({\n        url: url,\n        point_id: point.id,\n        point_lat: point.lat,\n        point_lon: point.lon,\n        point_name: point.id\n    });\n}\n\nnode.status({\n    fill: 'blue', shape: 'dot',\n    text: `已请求 ${points.length} 个坐标 | ${new Date().toLocaleTimeString()}`\n});\nreturn null;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 420,
+        "y": 380,
+        "wires": [
+            [
+                "openmeteo_http"
+            ]
+        ]
+    },
+    {
+        "id": "openmeteo_http",
+        "type": "http request",
+        "z": "openmeteo_tab",
+        "name": "Open-Meteo API",
+        "method": "GET",
+        "ret": "obj",
+        "paytoqs": "ignore",
+        "url": "",
+        "tls": "",
+        "persist": false,
+        "proxy": "",
+        "insecureHTTPParser": false,
+        "authType": "",
+        "senderr": false,
+        "headers": [],
+        "x": 630,
+        "y": 380,
+        "wires": [
+            [
+                "openmeteo_check_status"
+            ]
+        ]
+    },
+    {
+        "id": "openmeteo_check_status",
+        "type": "switch",
+        "z": "openmeteo_tab",
+        "name": "HTTP 200?",
+        "property": "statusCode",
+        "propertyType": "msg",
+        "rules": [
+            {
+                "t": "eq",
+                "v": "200",
+                "vt": "num"
+            },
+            {
+                "t": "else"
+            }
+        ],
+        "checkall": "true",
+        "repair": false,
+        "outputs": 2,
+        "x": 810,
+        "y": 380,
+        "wires": [
+            [
+                "openmeteo_transform"
+            ],
+            [
+                "openmeteo_error_debug"
+            ]
+        ]
+    },
+    {
+        "id": "openmeteo_error_debug",
+        "type": "debug",
+        "z": "openmeteo_tab",
+        "name": "API Error",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": true,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "statusCode",
+        "statusType": "msg",
+        "x": 1000,
+        "y": 460,
+        "wires": []
+    },
+    {
+        "id": "openmeteo_transform",
+        "type": "function",
+        "z": "openmeteo_tab",
+        "name": "Transform → InfluxDB",
+        "func": "// ============================================================\n// Transform v2.0 — 存储每个坐标点的独立 GHI\n//\n// 输入：Open-Meteo 单坐标响应\n// 输出：\n//   1. 更新 global.ghi_map（供主管道使用）\n//   2. 写入 InfluxDB（供 Grafana 显示）\n//\n// global.ghi_map 结构：\n//   {\n//     'nicosia':    { ghi: 500, temp: 25, cloud: 10, lat: 35.18, lon: 33.38 },\n//     'device_001': { ghi: 515, temp: 26, cloud: 8,  lat: 34.67, lon: 33.04 },\n//     ...\n//   }\n// ============================================================\n\nconst data = msg.payload;\nconst point_id = msg.point_id;\nconst point_lat = msg.point_lat;\nconst point_lon = msg.point_lon;\nconst point_name = msg.point_name;\n\nif (!data || !data.current) {\n    node.warn(`Open-Meteo: 无数据 (${point_id})`);\n    return null;\n}\n\nconst ghi = data.current.shortwave_radiation || 0;\nconst temp = data.current.temperature_2m || 0;\nconst cloud = data.current.cloud_cover || 0;\n\n// ========== 1. 存入 global ghi_map ==========\nlet ghi_map = global.get('ghi_map') || {};\nghi_map[point_id] = {\n    ghi: ghi,\n    temp: temp,\n    cloud: cloud,\n    lat: point_lat,\n    lon: point_lon,\n    name: point_name,\n    updated: new Date().toISOString()\n};\nglobal.set('ghi_map', ghi_map);\n\n// 兼容旧代码：保持 latest_ghi（用第一个尼科西亚或任意点）\nif (point_id === 'nicosia') {\n    global.set('latest_ghi', ghi);\n    global.set('latest_air_temp', temp);\n}\n// 如果还没设过 latest_ghi，用当前点\nif (!global.get('latest_ghi') && ghi > 0) {\n    global.set('latest_ghi', ghi);\n    global.set('latest_air_temp', temp);\n}\n\n// ========== 2. 写入 InfluxDB ==========\nmsg.payload = [\n    {\n        ghi: ghi,\n        ambient_temp: temp,\n        cloud_cover: cloud,\n        latitude: point_lat,\n        longitude: point_lon\n    },\n    {\n        source: 'open-meteo',\n        data_type: 'actual',\n        location: point_name,\n        point_id: point_id\n    }\n];\n\nnode.status({ fill: 'green', shape: 'dot', text: `${point_name}: GHI=${ghi} | ${temp}°C` });\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1020,
+        "y": 380,
+        "wires": [
+            [
+                "openmeteo_influx_out",
+                "openmeteo_data_debug"
+            ]
+        ]
+    },
+    {
+        "id": "openmeteo_influx_out",
+        "type": "influxdb out",
+        "z": "openmeteo_tab",
+        "influxdb": "influxdb_config_openmeteo",
+        "name": "Write → InfluxDB",
+        "measurement": "openmeteo_irradiance",
+        "precision": "",
+        "retentionPolicy": "",
+        "database": "",
+        "precisionV18FluxV20": "ms",
+        "retentionPolicyV18Flux": "",
+        "org": "pv-monitoring",
+        "bucket": "pv_data",
+        "x": 1260,
+        "y": 340,
+        "wires": []
+    },
+    {
+        "id": "openmeteo_data_debug",
+        "type": "debug",
+        "z": "openmeteo_tab",
+        "name": "Irradiance Data",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "x": 1260,
+        "y": 420,
+        "wires": []
+    },
+    {
+        "id": "dropdown_device",
+        "type": "ui_dropdown",
+        "z": "flow_remote_control",
+        "name": "选择设备",
+        "label": "选择设备",
+        "tooltip": "",
+        "place": "请选择要控制的设备",
+        "group": "dashboard_group_control",
+        "order": 1,
+        "width": 0,
+        "height": 0,
+        "passthru": true,
+        "multiple": false,
+        "options": [
+            {
+                "label": "device_001 (真实设备)",
+                "value": "device_001",
+                "type": "str"
+            },
+            {
+                "label": "device_101",
+                "value": "device_101",
+                "type": "str"
+            },
+            {
+                "label": "device_102",
+                "value": "device_102",
+                "type": "str"
+            },
+            {
+                "label": "device_103",
+                "value": "device_103",
+                "type": "str"
+            },
+            {
+                "label": "device_104",
+                "value": "device_104",
+                "type": "str"
+            },
+            {
+                "label": "device_105",
+                "value": "device_105",
+                "type": "str"
+            },
+            {
+                "label": "device_110",
+                "value": "device_110",
+                "type": "str"
+            },
+            {
+                "label": "device_120",
+                "value": "device_120",
+                "type": "str"
+            },
+            {
+                "label": "device_130",
+                "value": "device_130",
+                "type": "str"
+            },
+            {
+                "label": "device_140",
+                "value": "device_140",
+                "type": "str"
+            },
+            {
+                "label": "device_150",
+                "value": "device_150",
+                "type": "str"
+            }
+        ],
+        "payload": "",
+        "topic": "select_device",
+        "topicType": "str",
+        "x": 160,
+        "y": 100,
+        "wires": [
+            [
+                "func_build_command"
+            ]
+        ]
+    },
+    {
+        "id": "switch_breaker",
+        "type": "ui_switch",
+        "z": "flow_remote_control",
+        "name": "合闸/分闸",
+        "label": "断路器开关",
+        "tooltip": "ON=合闸  OFF=分闸",
+        "group": "dashboard_group_control",
+        "order": 2,
+        "width": 0,
+        "height": 0,
+        "passthru": true,
+        "decouple": "false",
+        "topic": "breaker_control",
+        "topicType": "str",
+        "style": "",
+        "onvalue": "on",
+        "onvalueType": "str",
+        "onicon": "",
+        "oncolor": "#00B300",
+        "offvalue": "off",
+        "offvalueType": "str",
+        "officon": "",
+        "offcolor": "#CC0000",
+        "animate": true,
+        "x": 160,
+        "y": 200,
+        "wires": [
+            [
+                "func_build_command"
+            ]
+        ]
+    },
+    {
+        "id": "func_build_command",
+        "type": "function",
+        "z": "flow_remote_control",
+        "name": "构建控制指令",
+        "func": "// ============================================================\n// 远程控制指令构建 v2.0\n// 新增：同步更新模拟器设备状态（flow context）\n// ============================================================\n\n// dropdown 选择设备\nif (msg.topic === 'select_device') {\n    flow.set('selected_device', msg.payload);\n    node.status({ fill: 'blue', shape: 'dot', text: `已选择: ${msg.payload}` });\n    return null;\n}\n\n// switch 触发控制\nif (msg.topic === 'breaker_control') {\n    const device_id = flow.get('selected_device');\n    if (!device_id) {\n        node.status({ fill: 'red', shape: 'ring', text: '请先选择设备！' });\n        node.warn('未选择设备');\n        return null;\n    }\n\n    const command = msg.payload;  // \"on\" 或 \"off\"\n    const action = command === 'on' ? '合闸' : '分闸';\n    const now_str = new Date().toLocaleTimeString();\n\n    // ========== 同步更新模拟器的设备状态 ==========\n    const manual_off = global.get('manual_off_devices') || {};\n    if (command === 'off') {\n        manual_off[device_id] = true;\n    } else {\n        delete manual_off[device_id];\n    }\n    global.set('manual_off_devices', manual_off);\n\n    // 构建 MQTT 消息\n    const mqtt_msg = {\n        topic: `pv/${device_id}/control`,\n        payload: JSON.stringify({\n            command: command,\n            device_id: device_id,\n            timestamp: Math.floor(Date.now() / 1000),\n            source: \"dashboard\"\n        })\n    };\n\n    // 构建状态反馈\n    const status_msg = {\n        payload: `${now_str} | ${device_id} → ${action}`\n    };\n\n    // 构建控制日志\n    const log_msg = {\n        payload: [\n            {\n                command_str: action,\n                command_code: command === 'on' ? 1.0 : 0.0,\n                source: \"dashboard\"\n            },\n            {\n                device_id: device_id,\n                action: command\n            }\n        ]\n    };\n\n    node.status({\n        fill: command === 'on' ? 'green' : 'red',\n        shape: 'dot',\n        text: `${device_id}: ${action} | ${now_str}`\n    });\n\n    return [mqtt_msg, status_msg, log_msg, mqtt_msg];\n}\n\nreturn null;",
+        "outputs": 4,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 420,
+        "y": 150,
+        "wires": [
+            [
+                "mqtt_out_control"
+            ],
+            [
+                "text_status"
+            ],
+            [
+                "influx_control_log"
+            ],
+            [
+                "debug_control"
+            ]
+        ]
+    },
+    {
+        "id": "mqtt_out_control",
+        "type": "mqtt out",
+        "z": "flow_remote_control",
+        "name": "发送控制指令",
+        "topic": "",
+        "qos": "1",
+        "retain": "",
+        "respTopic": "",
+        "contentType": "",
+        "userProps": "",
+        "correl": "",
+        "expiry": "",
+        "broker": "emqx_broker",
+        "x": 680,
+        "y": 80,
+        "wires": []
+    },
+    {
+        "id": "text_status",
+        "type": "ui_text",
+        "z": "flow_remote_control",
+        "group": "dashboard_group_status",
+        "order": 1,
+        "width": 0,
+        "height": 0,
+        "name": "操作记录",
+        "label": "最近操作",
+        "format": "{{msg.payload}}",
+        "layout": "row-spread",
+        "x": 670,
+        "y": 150,
+        "wires": []
+    },
+    {
+        "id": "influx_control_log",
+        "type": "influxdb out",
+        "z": "flow_remote_control",
+        "influxdb": "influxdb_server",
+        "name": "写入控制日志",
+        "measurement": "control_log",
+        "precision": "",
+        "retentionPolicy": "",
+        "database": "",
+        "precisionV18FluxV20": "ms",
+        "retentionPolicyV18Flux": "",
+        "org": "pv-monitoring",
+        "bucket": "pv_data",
+        "x": 690,
+        "y": 220,
+        "wires": []
+    },
+    {
+        "id": "debug_control",
+        "type": "debug",
+        "z": "flow_remote_control",
+        "name": "控制日志",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": true,
+        "complete": "payload",
+        "targetType": "msg",
+        "statusVal": "payload",
+        "statusType": "auto",
+        "x": 670,
+        "y": 290,
+        "wires": []
+    },
+    {
+        "id": "inject_startup",
+        "type": "inject",
+        "z": "flow_device_registry",
+        "name": "启动时同步",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": true,
+        "onceDelay": "5",
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 140,
+        "y": 80,
+        "wires": [
+            [
+                "pg_query"
+            ]
+        ]
+    },
+    {
+        "id": "inject_5min",
+        "type": "inject",
+        "z": "flow_device_registry",
+        "name": "每5分钟同步",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "300",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0,
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 150,
+        "y": 160,
+        "wires": [
+            [
+                "pg_query"
+            ]
+        ]
+    },
+    {
+        "id": "pg_query",
+        "type": "postgresql",
+        "z": "flow_device_registry",
+        "name": "查询设备注册表",
+        "query": "SELECT device_id, latitude, longitude, name, location, k_factor, panel_power_wp, device_type, status\nFROM device_registry\nWHERE status = 'active'\nORDER BY device_id",
+        "postgreSQLConfig": "pg_config_pv",
+        "split": false,
+        "rowsPerMsg": 0,
+        "outputs": 1,
+        "x": 380,
+        "y": 120,
+        "wires": [
+            [
+                "sync_global"
+            ]
+        ]
+    },
+    {
+        "id": "sync_global",
+        "type": "function",
+        "z": "flow_device_registry",
+        "name": "同步到 global",
+        "func": "// ============================================================\n// 设备注册表同步 — PostgreSQL → global context\n//\n// 输出：\n//   global.device_registry = {\n//     'device_001': { lat, lon, k, name, location, ... },\n//     'device_002': { lat, lon, k, name, location, ... },\n//   }\n//\n//   global.irradiance_points = [\n//     { id: 'nicosia',    lat: 35.1856, lon: 33.3823 },\n//     { id: 'device_001', lat: 34.6757, lon: 33.0424 },\n//     ...\n//   ]\n// ============================================================\n\nconst rows = msg.payload;\n\nif (!rows || !Array.isArray(rows) || rows.length === 0) {\n    node.status({ fill: 'yellow', shape: 'ring', text: '数据库无设备记录' });\n    node.warn('device_registry 表为空');\n    return null;\n}\n\n// ========== 1. 构建设备注册表 ==========\nconst registry = {};\nfor (const row of rows) {\n    registry[row.device_id] = {\n        lat: row.latitude,\n        lon: row.longitude,\n        k: row.k_factor || 0.15,\n        name: row.name || row.device_id,\n        location: row.location || 'Cyprus',\n        panel_power: row.panel_power_wp || 0,\n        device_type: row.device_type || 'real',\n        status: row.status || 'active'\n    };\n}\nglobal.set('device_registry', registry);\n\n// ========== 2. 构建辐照度采集点列表 ==========\n// 塞浦路斯基础网格点（保证全岛覆盖）\nconst GRID_POINTS = [\n    { id: 'nicosia',   lat: 35.1856, lon: 33.3823 },\n    { id: 'limassol',  lat: 34.6841, lon: 33.0379 },\n    { id: 'larnaca',   lat: 34.9229, lon: 33.6233 },\n    { id: 'paphos',    lat: 34.7720, lon: 32.4297 },\n    { id: 'famagusta', lat: 35.1174, lon: 33.9418 },\n    { id: 'troodos',   lat: 34.9267, lon: 32.8800 },\n    { id: 'polis',     lat: 35.0355, lon: 32.4264 },\n    { id: 'protaras',  lat: 35.0125, lon: 34.0583 },\n];\n\nconst all_points = [...GRID_POINTS];\n\n// 把每台真实设备的坐标加入采集列表（去重：距已有点 < 5km 则跳过）\nfor (const [dev_id, info] of Object.entries(registry)) {\n    const too_close = all_points.some(p =>\n        Math.abs(p.lat - info.lat) < 0.05 && Math.abs(p.lon - info.lon) < 0.05\n    );\n    if (!too_close) {\n        all_points.push({ id: dev_id, lat: info.lat, lon: info.lon });\n    }\n}\n\nglobal.set('irradiance_points', all_points);\n\n// ========== 3. 日志 ==========\nconst device_list = Object.keys(registry).join(', ');\nnode.status({\n    fill: 'green', shape: 'dot',\n    text: `${rows.length} 台设备 | ${all_points.length} 个采集点 | ${new Date().toLocaleTimeString()}`\n});\n\nnode.warn(`注册表同步完成: ${rows.length} 台设备 [${device_list}], ${all_points.length} 个辐照度采集点`);\n\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 580,
+        "y": 120,
+        "wires": [
+            [
+                "debug_registry"
+            ]
+        ]
+    },
+    {
+        "id": "debug_registry",
+        "type": "debug",
+        "z": "flow_device_registry",
+        "name": "注册表数据",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 770,
+        "y": 120,
+        "wires": []
+    },
+    {
+        "id": "37a048e8cd057b15",
+        "type": "inject",
+        "z": "flow_device_registry",
+        "name": "",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 390,
+        "y": 380,
+        "wires": [
+            [
+                "38b819c43b12903a"
+            ]
+        ]
+    },
+    {
+        "id": "38b819c43b12903a",
+        "type": "function",
+        "z": "flow_device_registry",
+        "name": "function 1",
+        "func": "msg.payload = global.get('ghi_map');\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 600,
+        "y": 380,
+        "wires": [
+            [
+                "ae440a7f14fb5a02"
+            ]
+        ]
+    },
+    {
+        "id": "ae440a7f14fb5a02",
+        "type": "debug",
+        "z": "flow_device_registry",
+        "name": "debug 1",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "false",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 820,
+        "y": 380,
+        "wires": []
+    },
+    {
+        "id": "5d2caa7879925e93",
+        "type": "inject",
+        "z": "flow_device_registry",
+        "name": "",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 330,
+        "y": 500,
+        "wires": [
+            [
+                "af9cb963461ea77d"
+            ]
+        ]
+    },
+    {
+        "id": "af9cb963461ea77d",
+        "type": "function",
+        "z": "flow_device_registry",
+        "name": "function 2",
+        "func": "const registry = global.get('device_registry') || {};\nmsg.payload = {\n    registry_keys: Object.keys(registry),\n    device_001: registry['device_001'],\n    full_registry: registry\n};\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 520,
+        "y": 500,
+        "wires": [
+            [
+                "5504d331065279cc"
+            ]
+        ]
+    },
+    {
+        "id": "5504d331065279cc",
+        "type": "debug",
+        "z": "flow_device_registry",
+        "name": "debug 2",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "false",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 740,
+        "y": 500,
+        "wires": []
+    },
+    {
+        "id": "0251121cef4bd4dc",
+        "type": "global-config",
+        "env": [],
+        "modules": {
+            "node-red-contrib-influxdb": "0.7.0",
+            "node-red-dashboard": "3.6.6",
+            "node-red-contrib-postgresql": "0.15.4"
+        }
+    }
+]

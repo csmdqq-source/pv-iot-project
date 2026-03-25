@@ -1,0 +1,75 @@
+services:
+  # InfluxDB 2.x
+  influxdb:
+    image: influxdb:2.7
+    container_name: influxdb
+    restart: always
+    ports:
+      - "8086:8086"
+    environment:
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_USERNAME=admin
+      - DOCKER_INFLUXDB_INIT_PASSWORD=admin123456
+      - DOCKER_INFLUXDB_INIT_ORG=pv-monitoring
+      - DOCKER_INFLUXDB_INIT_BUCKET=pv_data
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=my-super-secret-token-12345
+    volumes:
+      - ./influxdb/data:/var/lib/influxdb2
+      - ./influxdb/config:/etc/influxdb2
+    networks:
+      - pv-network
+
+  # Node-RED
+  nodered:
+    image: nodered/node-red:latest
+    container_name: nodered
+    restart: always
+    ports:
+      - "1880:1880"
+    environment:
+      - TZ=Asia/Shanghai
+    volumes:
+      - ./node-red/data:/data
+    depends_on:
+      - influxdb
+    networks:
+      - pv-network
+
+  # Grafana
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin123
+      - GF_INSTALL_PLUGINS=grafana-clock-panel
+    volumes:
+      - ./grafana/data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    depends_on:
+      - influxdb
+    networks:
+      - pv-network
+
+  # PostgreSQL - 设备注册表数据库 (这是你图片里新增的部分)
+  postgres:
+    image: postgres:16
+    container_name: postgres
+    restart: always
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=admin123456
+      - POSTGRES_DB=pv_system
+    volumes:
+      - ./postgres/data:/var/lib/postgresql/data
+    networks:
+      - pv-network
+
+networks:
+  pv-network:
+    driver: bridge
