@@ -1,138 +1,166 @@
-# IoT-based PV Monitoring System
+# STM32WB5MM-DK Firmware Installation Guide
 
-A smart photovoltaic monitoring system with Performance Ratio (PR) based fault detection and remote breaker control, built for MSc thesis at Cyprus University of Technology.
+## 1. Development Environment Setup
 
-## System Architecture
+### Required Tools
+| Tool | Version | Purpose |
+|------|---------|---------|
+| STM32CubeIDE | 1.13+ | Compile and flash firmware |
+| STM32CubeMX | 6.9+ | Pin configuration and code generation |
+| ST-LINK Driver | V2 | USB debugger driver |
+| Serial Terminal | Tera Term / PuTTY | View debug logs |
 
-![System Architecture](hardware/system_architecture.png)
+### Installation Steps
+1. Download and install [STM32CubeIDE](https://www.st.com/en/development-tools/stm32cubeide.html)
+2. Install ST-LINK USB driver (prompted during IDE installation)
+3. Connect the STM32WB5MM-DK board via USB cable (use the USB ST-LINK port, not USB USER)
+4. Open Device Manager and confirm "STMicroelectronics STLink Virtual COM Port" is recognized
 
+## 2. Firmware Configuration
+
+### 2.1 Zigbee Configuration
+- Role: **Coordinator** (creates and manages the network)
+- Channel: Auto-select
+- Join Policy: Permit Join enabled for 60 seconds after power-on
+- Breaker Cluster Configuration:
+  - Cluster 0xEF00 (Tuya private protocol) — receive electrical data
+  - ZCL OnOff Cluster — send ON/OFF control commands
+
+### 2.2 LPUART1 Configuration (Communication with A7670E)
 ```
-PV Panel → Inverter (DC→AC) → Breaker (TOWSMR1-40)
-  → Zigbee (0xEF00) → STM32WB5MM-DK → LPUART1
-  → A7670E (4G LTE) → MQTT (broker.emqx.io:1883)
-  → Node-RED → InfluxDB → Grafana
+Pin Assignment:
+  PB5 (Pin 19) → LPUART1_TX → Connect to A7670E RXD
+  PC0 (Pin 12) → LPUART1_RX → Connect to A7670E TXD
+  GND           → Common ground
 
-Remote Control (downstream):
-  Dashboard → MQTT → A7670E → STM32 → Zigbee → Breaker ON/OFF
-```
-
-## Features
-
-- Real-time power monitoring (voltage, current, power, temperature)
-- Performance Ratio fault detection with 4-level classification
-- Remote breaker ON/OFF control via MQTT
-- 50-device simulator for scalability testing (5 cities across Cyprus)
-- GHI-based irradiance matching (8-grid-point coverage via Open-Meteo API)
-- PostgreSQL device registry with automatic Node-RED synchronization
-- Alert system with 30-minute cooldown per device per rule
-
-## Tech Stack
-
-| Layer | Technology |
-|-------|-----------|
-| Edge Gateway | STM32WB5MM-DK (Cortex-M4 + M0+ for Zigbee) |
-| 4G Communication | A7670E LTE Cat-1 Module |
-| Smart Breaker | TOWSMR1-40 (Zigbee, Tuya Protocol) |
-| Protocol | MQTT (QoS 0) + Zigbee 3.0 (Cluster 0xEF00) |
-| Data Processing | Node-RED |
-| Time-series DB | InfluxDB 2.7 (Flux query language) |
-| Relational DB | PostgreSQL 15 (device registry) |
-| Visualization | Grafana (7 dashboard panels) |
-| Deployment | Docker Compose |
-
-## Requirements
-
-### Hardware
-| Device | Model | Purpose |
-|--------|-------|---------|
-| Edge Gateway | STM32WB5MM-DK (MB1292) | Zigbee Coordinator + data processing |
-| 4G Module | SIMCom A7670E | LTE Cat-1 MQTT communication |
-| Smart Breaker | TOWSMR1-40 (Zigbee) | Voltage/current sensing + remote switch |
-| 4G Antenna | Wideband SMA antenna | External antenna for A7670E |
-| SIM Card | Any 4G data SIM | Mobile network connectivity |
-| Jumper Wires | Female-to-female × 3 | PB5→RXD, PC0→TXD, GND |
-| USB Cables | Micro-USB × 2 | Power for STM32 and A7670E |
-
-### Software
-| Software | Version | Purpose |
-|----------|---------|---------|
-| Docker Desktop | 20.10+ | Containerized dashboard deployment |
-| STM32CubeIDE | 1.13+ | Firmware compilation and flashing |
-| Git | 2.30+ | Repository management |
-
-### Operating System
-- **Dashboard server:** Windows 10+, Ubuntu 20.04+, or macOS (Docker required)
-- **Firmware development:** Windows 10+ (STM32CubeIDE)
-- **Minimum specs:** Dual-core CPU, 4GB RAM, 10GB disk space
-
-## Lab Test Results
-
-| Metric | Voltage | Current | Power |
-|--------|---------|---------|-------|
-| Mean Error (>50W) | 0.13% | 0.77% | 0.69% |
-| Max Error (>50W) | 0.18% | 2.48% | 1.81% |
-
-| Metric | Value |
-|--------|-------|
-| STM32 LCD response time | 10.2s avg |
-| Grafana cloud response time | 19.2s avg |
-| Remote control (breaker trip) | 0.48s avg |
-| Remote control (breaker close) | 0.51s avg |
-
-## Repository Structure
-
-```
-pv-iot-project/
-├── README.md
-├── docs/
-│   ├── install-stm32.md          # STM32 firmware installation guide
-│   ├── install-dashboard.md      # Dashboard setup guide (Docker)
-│   ├── custom-server.md          # Custom MQTT server & portability guide
-│   ├── PV_Project_Handoff_v4.md  # Project documentation
-│   └── device_management_guide.md
-├── stm32-firmware/
-│   ├── README.md                 # How to open, configure, build and flash
-│   ├── a7670e.h                  # A7670E driver header
-│   ├── a7670e.c                  # A7670E driver (MQTT state machine)
-│   └── app_zigbee.c              # Zigbee application (control callback)
-├── dashboard/
-│   ├── docker-compose.yml
-│   ├── flows.json                # Node-RED flows export
-│   ├── grafana-dashboard.json    # Grafana dashboard export
-│   └── insert_devices.sql        # 50 simulated devices SQL
-├── hardware/
-│   ├── wiring_diagram.pdf
-│   └── photos/
-├── thesis/
-│   ├── figures/
-│   └── data/
-└── nodered/
-    ├── device-registry-flow.json
-    └── remote-control-flow.json
+UART Parameters:
+  Baud rate: 115200
+  Data bits: 8
+  Stop bits: 1
+  Parity:    None
+  Flow ctrl: None
 ```
 
-## Quick Start
+### 2.3 UART Ring Buffer
+The firmware implements a circular ring buffer for LPUART1 reception to prevent data loss during high-throughput periods (e.g., when A7670E sends URC notifications while the MCU is processing Zigbee data). The ring buffer is configured with a default size of 512 bytes and uses DMA-based reception with idle line detection to trigger buffer reads. This ensures no incoming bytes are dropped even when the main loop is busy with Zigbee stack processing or OLED display updates.
 
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/csmdqq-source/pv-iot-project.git
-   cd pv-iot-project
-   ```
+### 2.4 Key Constants
+Modify the following constants in the firmware source code:
 
-2. **Start the dashboard** (requires Docker)
-   ```bash
-   cd dashboard
-   docker-compose up -d
-   ```
+```c
+// MQTT configuration in a7670e.h
+#define MQTT_BROKER_HOST    "broker.emqx.io"
+#define MQTT_BROKER_PORT    1883
+#define MQTT_CLIENT_PREFIX  "pv_device_001_stm32_"
+#define MQTT_PUB_TOPIC      "pv/device_001/data"
+#define MQTT_SUB_TOPIC      "pv/device_001/control"
+#define MQTT_PUB_INTERVAL   10000  // Publish interval in milliseconds
+```
 
-3. **Flash STM32 firmware** → See [docs/install-stm32.md](docs/install-stm32.md)
+To switch to a different MQTT broker, only `MQTT_BROKER_HOST` and `MQTT_BROKER_PORT` need to be changed.
 
-4. **Configure the dashboard** → See [docs/install-dashboard.md](docs/install-dashboard.md)
+### 2.5 Flash Zigbee Wireless Stack (First-Time Only)
+The STM32WB M0+ core requires a pre-compiled Zigbee stack binary. This only needs to be done once per board.
 
-5. **Custom MQTT server** → See [docs/custom-server.md](docs/custom-server.md)
+Open STM32CubeProgrammer
+Connect to the board via ST-LINK (USB)
+Left menu → Firmware Upgrade Services (FUS)
+Select file: stm32wb5x_Zigbee_FFD_fw.bin
 
-## Author
+Location: STM32Cube_FW_WB/Projects/STM32WB_Copro_Wireless_Binaries/STM32WB5x/stm32wb5x_Zigbee_FFD_fw.bin
+Download from ST official FW package if not available locally
 
-**Tian Qiyuan** — MSc Electronic Information
-- Cyprus University of Technology (Supervisor: Prof. Petros Aristidou)
-- Hangzhou Dianzi University
+
+Click Firmware Upgrade, wait for completion
+Board will reset automatically
+
+Without this step, Zigbee communication will not function.
+
+## 3. Compile and Flash
+
+### 3.1 Open Project
+1. Launch STM32CubeIDE
+2. File → Import → Existing Projects into Workspace
+3. Select the firmware project folder (containing the `.project` file)
+4. Click Finish
+
+### 3.2 Build
+1. Right-click the project → Build Project (or Ctrl+B)
+2. Verify the Console displays `Build Finished. 0 errors`
+3. The compiled binary is located in the `Debug/` or `Release/` directory
+
+### 3.3 Flash
+1. Ensure the board is connected via USB and recognized
+2. Run → Debug As → STM32 C/C++ Application
+3. Select ST-LINK when prompted for the first time
+4. Wait for flashing to complete; the firmware starts automatically
+
+## 4. First Test
+
+### 4.1 Verify Zigbee Pairing
+1. Open a serial terminal, connect to the STM32 virtual COM port (baud rate 115200)
+2. Power on the STM32
+3. Power on the TOWSMR1-40 breaker
+4. Wait for the following log output (approximately 10–20 seconds):
+
+```
+[M4 APPLICATION] Send command Permit join during 60s
+[M4 APPLICATION] Device joined: 0x6d38
+[M4 APPLICATION] Tuya device detected (0xEF00)
+[M4 APPLICATION] Tuya binding SUCCESS!
+[M4 APPLICATION] Coordinator can now receive DP reports
+```
+
+`Tuya binding SUCCESS!` confirms successful Zigbee pairing.
+
+### 4.2 Verify MQTT Connection
+After pairing, the A7670E module automatically connects to the MQTT broker:
+
+```
+[A7670E] ACCQ OK
+[A7670E] MQTT connected to broker.emqx.io:1883
+[A7670E] Subscribed to: pv/device_001/control
+[POWER] V=239.2V I=0mA P=0.0W
+```
+
+`MQTT connected` and `Subscribed to` confirm a successful MQTT session.
+
+### 4.3 Verify Data Publishing
+On another computer, use an MQTT client (e.g., MQTTX) to subscribe to `pv/device_001/data`. You should receive JSON payloads:
+
+```json
+{
+  "device_id": "device_001",
+  "voltage": 239.2,
+  "current": 0.0,
+  "power": 0.0,
+  "status": 1,
+  "temperature": 31.6
+}
+```
+
+## 5. Hardware Wiring Summary
+
+```
+STM32WB5MM-DK        A7670E 4G Module
+  PB5 (TX)  --------→  RXD
+  PC0 (RX)  ←--------  TXD
+  GND       ←-------→  GND
+
+Power: Both devices share a single DC 5V USB power source
+
+STM32 Antenna: Built-in PCB antenna (integrated in STM32WB5MMG module)
+A7670E Antenna: External 4G wideband antenna (SMA connector)
+
+TOWSMR1-40 Breaker: Connected wirelessly via Zigbee, wired in series with 240V AC line
+```
+
+## 6. Troubleshooting
+
+| Issue | Solution |
+|-------|----------|
+| Zigbee pairing fails | Power cycle both STM32 and breaker, wait 60 seconds |
+| MQTT connection timeout | Check A7670E 4G antenna connection and SIM card data plan |
+| No serial output | Ensure USB is connected to ST-LINK port, baud rate set to 115200 |
+| Build errors | Verify STM32CubeIDE version ≥ 1.13 and Zigbee libraries are installed |
+| Re-pairing needed after power loss | Normal behavior — STM32 Zigbee state is not persisted across reboots |

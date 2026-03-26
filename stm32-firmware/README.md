@@ -59,6 +59,23 @@ Modify the following constants in the firmware source code:
 
 To switch to a different MQTT broker, only `MQTT_BROKER_HOST` and `MQTT_BROKER_PORT` need to be changed.
 
+### 2.5 Flash Zigbee Wireless Stack (First-Time Only)
+The STM32WB M0+ core requires a pre-compiled Zigbee stack binary. This only needs to be done once per board.
+
+Open STM32CubeProgrammer
+Connect to the board via ST-LINK (USB)
+Left menu → Firmware Upgrade Services (FUS)
+Select file: stm32wb5x_Zigbee_FFD_fw.bin
+
+Location: STM32Cube_FW_WB/Projects/STM32WB_Copro_Wireless_Binaries/STM32WB5x/stm32wb5x_Zigbee_FFD_fw.bin
+Download from ST official FW package if not available locally
+
+
+Click Firmware Upgrade, wait for completion
+Board will reset automatically
+
+Without this step, Zigbee communication will not function.
+
 ## 3. Compile and Flash
 
 ### 3.1 Open Project
