@@ -68,10 +68,13 @@ After switching brokers, update the address in these three locations:
 
 **① STM32 Firmware**
 
-Edit `a7670e.h`:
+Edit `a7670e.c`:
 ```c
 #define MQTT_BROKER_HOST    "your-server-IP-or-domain"
 #define MQTT_BROKER_PORT    1883
+#define A7670E_MQTT_CLIENT_ID "pv_device_001_stm32"
+#define A7670E_MQTT_USERNAME  "your-username"   // leave "" if no auth
+#define A7670E_MQTT_PASSWORD  "your-password"   // leave "" if no auth
 ```
 Recompile and flash the firmware.
 

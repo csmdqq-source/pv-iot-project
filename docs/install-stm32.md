@@ -48,16 +48,18 @@ The firmware implements a circular ring buffer for LPUART1 reception to prevent 
 Modify the following constants in the firmware source code:
 
 ```c
-// MQTT configuration in a7670e.h
+// MQTT configuration in a7670e.c
 #define MQTT_BROKER_HOST    "broker.emqx.io"
 #define MQTT_BROKER_PORT    1883
-#define MQTT_CLIENT_PREFIX  "pv_device_001_stm32_"
+#define A7670E_MQTT_CLIENT_ID "pv_device_001_stm32"
+#define A7670E_MQTT_USERNAME  "your-username"   
+#define A7670E_MQTT_PASSWORD  "your-password" 
 #define MQTT_PUB_TOPIC      "pv/device_001/data"
 #define MQTT_SUB_TOPIC      "pv/device_001/control"
 #define MQTT_PUB_INTERVAL   10000  // Publish interval in milliseconds
 ```
 
-To switch to a different MQTT broker, only `MQTT_BROKER_HOST` and `MQTT_BROKER_PORT` need to be changed.
+To switch to a different MQTT broker, `MQTT_BROKER_HOST` ，`MQTT_BROKER_PORT`，`A7670E_MQTT_USERNAME` and `A7670E_MQTT_PASSWORD` need to be changed.
 
 ## 3. Compile and Flash
 
