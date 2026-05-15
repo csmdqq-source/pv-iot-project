@@ -1,239 +1,304 @@
-# Dashboard Installation Guide (Node-RED + InfluxDB + Grafana)
+# Cloud Dashboard Installation Guide
 
-## 1. Docker-Based Installation (Recommended)
+This guide describes the reproducible cloud deployment that was validated on a Tencent Cloud Ubuntu server. It starts Node-RED, InfluxDB, Grafana, and PostgreSQL using Docker Compose.
 
-### 1.1 Prerequisites
-- Operating System: Windows 10/11, Ubuntu 20.04+, or macOS
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed (Windows/Mac) or Docker Engine + docker-compose (Linux)
-- Minimum 4 GB available RAM, 10 GB disk space
+## 1. Target Architecture
 
-### 1.2 Start Services
+```text
+STM32WB5MM + A7670E
+  -> EMQX Cloud MQTT
+  -> Node-RED on Ubuntu cloud server
+  -> InfluxDB
+  -> Grafana
+```
+
+The local computer is not part of the runtime path. After deployment, the cloud server continues collecting data even if the local PC is turned off.
+
+## 2. Cloud Server
+
+The tested configuration was:
+
+```text
+Provider: Tencent Cloud Lighthouse
+Region: Frankfurt
+OS: Ubuntu 22.04 LTS
+CPU/RAM: 2 vCPU / 2 GB
+Disk: 40 GB SSD
+```
+
+Minimum practical configuration:
+
+```text
+1 vCPU / 1 GB RAM: possible but tight
+2 vCPU / 2 GB RAM: recommended
+```
+
+## 3. Firewall Rules
+
+Open these ports in the cloud firewall:
+
+| Port | Protocol | Purpose | Keep Open? |
+|------|----------|---------|------------|
+| 22 | TCP | SSH administration | Yes |
+| 3000 | TCP | Grafana dashboard | Yes |
+| 1880 | TCP | Node-RED editor | Only during debugging |
+| 80 | TCP | Optional HTTP | Optional |
+| ICMP | Ping | Connectivity test | Optional |
+
+Do not expose InfluxDB `8086` or PostgreSQL `5432` to the public Internet. They are accessed internally through Docker.
+
+## 4. Install Docker
+
+Log in to the server as `ubuntu` and run:
 
 ```bash
-# Clone the repository
-git clone https://github.com/csmdqq-source/pv-iot-project.git
+sudo apt update
+sudo apt install -y docker.io docker-compose
+sudo systemctl enable docker
+sudo systemctl start docker
+sudo usermod -aG docker ubuntu
+```
+
+Either log out and log back in, or use `sudo` for Docker commands:
+
+```bash
+sudo docker --version
+docker-compose --version
+```
+
+## 5. Copy the Repository
+
+Clone from GitHub:
+
+```bash
+git clone https://github.com/<your-user>/pv-iot-project.git
 cd pv-iot-project/dashboard
-
-# Start all services in the background
-docker-compose up -d
-
-# Verify running status (should show 4 containers)
-docker ps
+cp .env.example .env
+# Edit .env and replace placeholder passwords/tokens before deployment.
 ```
 
-### 1.3 Service Access
+If uploading files manually with SFTP, upload the `dashboard` folder and then run:
 
-| Service | URL | Username | Password |
-|---------|-----|----------|----------|
-| Node-RED | http://localhost:1880 | — | — |
-| Node-RED Dashboard | http://localhost:1880/ui | — | — |
-| Grafana | http://localhost:3000 | admin | admin123 |
-| InfluxDB | http://localhost:8086 | admin | admin123456 |
-| PostgreSQL | localhost:5432 | admin | admin123456 |
-
-### 1.4 docker-compose.yml Overview
-
-```yaml
-version: '3'
-services:
-  influxdb:
-    image: influxdb:2.7
-    ports:
-      - "8086:8086"
-    environment:
-      - DOCKER_INFLUXDB_INIT_MODE=setup
-      - DOCKER_INFLUXDB_INIT_USERNAME=admin
-      - DOCKER_INFLUXDB_INIT_PASSWORD=admin123456
-      - DOCKER_INFLUXDB_INIT_ORG=pv-monitoring
-      - DOCKER_INFLUXDB_INIT_BUCKET=pv_data
-      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=my-super-secret-token-12345
-    volumes:
-      - influxdb-data:/var/lib/influxdb2
-
-  nodered:
-    image: nodered/node-red:latest
-    ports:
-      - "1880:1880"
-    volumes:
-      - nodered-data:/data
-    depends_on:
-      - influxdb
-
-  grafana:
-    image: grafana/grafana:latest
-    ports:
-      - "3000:3000"
-    environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin123
-    volumes:
-      - grafana-data:/var/lib/grafana
-    depends_on:
-      - influxdb
-
-  postgres:
-    image: postgres:15
-    ports:
-      - "5432:5432"
-    environment:
-      - POSTGRES_USER=admin
-      - POSTGRES_PASSWORD=admin123456
-      - POSTGRES_DB=pv_system
-    volumes:
-      - postgres-data:/var/lib/postgresql/data
-
-volumes:
-  influxdb-data:
-  nodered-data:
-  grafana-data:
-  postgres-data:
-```
-
-## 2. Node-RED Configuration
-
-### 2.1 Import Flows
-1. Open http://localhost:1880
-2. Click the hamburger menu (top-right) → Import
-3. Select the `dashboard/flows.json` file and click Import
-4. Click the red **Deploy** button to activate the flows
-
-### 2.2 Install Required Nodes
-If any nodes appear red after import (missing dependencies), install them:
-1. Menu → Manage Palette → Install
-2. Search and install:
-   - `node-red-contrib-influxdb` (InfluxDB connector)
-   - `node-red-dashboard` (Dashboard UI)
-   - `node-red-node-postgresql` (PostgreSQL connector)
-
-### 2.3 Configure MQTT Broker Connection
-1. Double-click any MQTT In node
-2. Click the pencil icon next to Server
-3. Configure:
-   - Server: `broker.emqx.io`
-   - Port: `1883`
-   - Client ID: leave blank (auto-generated)
-   - Protocol: MQTT V3.1.1
-4. Click Update → Done → Deploy
-
-### 2.4 Flow Descriptions
-
-| Flow | Function | Key Nodes |
-|------|----------|-----------|
-| Flow 1 | Irradiance collection | Fetches GHI data from Open-Meteo API every 10 minutes for 8 grid points |
-| Flow 2 | PV monitoring pipeline | MQTT In → Validate & Transform → PR calculation → Anomaly detection → InfluxDB |
-| Flow 3 | Remote control | Dashboard button → MQTT Publish control command → Log to control_log |
-| Flow 4 | Device registry sync | Queries PostgreSQL every 5 minutes, syncs to global variables |
-
-### 2.5 Configure InfluxDB Connection
-1. Double-click any InfluxDB Out node
-2. Configure:
-   - Version: 2.0
-   - URL: `http://influxdb:8086` (inside Docker) or `http://localhost:8086` (external)
-   - Token: `my-super-secret-token-12345`
-   - Organization: `pv-monitoring`
-   - Bucket: `pv_data`
-
-### 2.6 Configure PostgreSQL Connection
-1. Double-click the PostgreSQL node
-2. Configure:
-   - Host: `postgres` (inside Docker) or `localhost` (external)
-   - Port: `5432`
-   - Database: `pv_system`
-   - Username: `admin`
-   - Password: `admin123456`
-
-## 3. Grafana Configuration
-
-### 3.1 Add InfluxDB Data Source
-1. Open http://localhost:3000, log in (admin / admin123)
-2. Left menu → Connections → Data Sources → Add data source
-3. Select InfluxDB
-4. Configure:
-   - Query Language: **Flux**
-   - URL: `http://influxdb:8086` (inside Docker)
-   - Organization: `pv-monitoring`
-   - Token: `my-super-secret-token-12345`
-   - Default Bucket: `pv_data`
-5. Click Save & Test — a green banner confirms success
-
-### 3.2 Import Dashboard
-1. Left menu → Dashboards → Import
-2. Upload `dashboard/grafana-dashboard.json`
-3. Select the InfluxDB data source just created
-4. Click Import
-
-### 3.3 Dashboard Panel Descriptions
-
-| Panel | Type | Data Source | Description |
-|-------|------|------------|-------------|
-| Real-time Power | Time Series | breaker_data.power | Power over time |
-| Solar Irradiance GHI | Time Series | breaker_data.ghi | GHI over time |
-| Voltage & Current | Time Series (dual Y-axis) | breaker_data.voltage/current | Green bars = voltage, yellow line = current |
-| Power/GHI Scatter | XY Chart | breaker_data (X=ghi, Y=power) | For PR analysis |
-| Breaker Status | Stat | breaker_data.status | Shows ON/OFF state |
-| Geo Map | GeoMap | breaker_data (lat, lon, power) | Device locations with power heatmap |
-| Alert History | Table | alerts | Detected anomaly events |
-
-### 3.4 Dashboard Variable Configuration
-The dashboard uses a `device_id` variable for device switching:
-- Variable name: `device_id`
-- Query type: Query
-- Data source: InfluxDB
-- Query: `import "influxdata/influxdb/schema" schema.tagValues(bucket: "pv_data", tag: "device_id")`
-
-All panel Flux queries filter by `${device_id}`.
-
-## 4. PostgreSQL Device Registry Initialization
-
-### 4.1 Create Table Schema
 ```bash
-docker exec -it postgres psql -U admin -d pv_system
+cd ~/pv-iot-project/dashboard
+mkdir -p node-red/data grafana/data grafana/provisioning influxdb/data influxdb/config postgres/data
+sudo chown -R 1000:1000 node-red
+sudo chown -R 472:472 grafana
+sudo chown -R 1000:1000 influxdb
+sudo chown -R 999:999 postgres
 ```
 
-```sql
-CREATE TABLE device_registry (
-    device_id VARCHAR(50) PRIMARY KEY,
-    latitude DOUBLE PRECISION NOT NULL,
-    longitude DOUBLE PRECISION NOT NULL,
-    name VARCHAR(100),
-    location VARCHAR(100),
-    k_factor DOUBLE PRECISION DEFAULT 0.15,
-    panel_power_wp INTEGER DEFAULT 0,
-    device_type VARCHAR(20) DEFAULT 'real',
-    status VARCHAR(20) DEFAULT 'active',
-    install_date DATE,
-    notes TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+Do not upload local database history folders unless historical data is required. A fresh deployment starts with an empty InfluxDB and PostgreSQL.
 
-CREATE INDEX idx_location ON device_registry(location);
-CREATE INDEX idx_status ON device_registry(status);
-CREATE INDEX idx_coords ON device_registry(latitude, longitude);
-```
+## 6. Start Services
 
-### 4.2 Import Simulated Devices
 ```bash
-docker exec -i postgres psql -U admin -d pv_system < dashboard/insert_devices.sql
+sudo docker-compose up -d
+sudo docker ps
 ```
 
-## 5. Verify Installation
+Expected containers:
 
-### 5.1 Check Data Flow
-1. Node-RED → Debug panel should show incoming MQTT messages
-2. InfluxDB → Data Explorer: query `from(bucket:"pv_data") |> range(start:-1h)` should return data
-3. Grafana → Select a device; panels should display data curves
+```text
+nodered
+influxdb
+grafana
+postgres
+```
 
-### 5.2 Check Simulator
-1. After deploying the simulator flow in Node-RED, 50 simulated devices begin generating data
-2. The Grafana Geo Map panel should show device markers across 5 cities in Cyprus
+Useful logs:
 
-## 6. Troubleshooting
+```bash
+sudo docker logs nodered --tail 100
+sudo docker logs influxdb --tail 100
+sudo docker logs grafana --tail 100
+```
 
-| Issue | Solution |
-|-------|----------|
-| Container fails to start | Run `docker-compose logs <service>` to inspect error logs |
-| Node-RED cannot reach InfluxDB | Use `http://influxdb:8086` (Docker internal DNS), not localhost |
-| Grafana shows no data | Verify data source token is correct and time range covers existing data |
-| PostgreSQL connection refused | Confirm port 5432 is not in use; use `postgres` as hostname inside Docker |
-| Panels show "No data" | Measurement name is `breaker_data`, not `device_metrics` |
-| Data gaps after laptop sleep | Set Power Options → Never sleep; Lid close → Do nothing |
+## 7. Initialize PostgreSQL Device Registry
+
+The Open-Meteo irradiance flow requires active device coordinates. Initialize the registry:
+
+```bash
+sudo docker exec -i postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" < init_device_registry.sql
+```
+
+Expected result includes:
+
+```text
+device_001 | 34.678 | 33.038 | limassol | real | active
+```
+
+Optional simulated devices:
+
+```bash
+sudo docker exec -i postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" < insert_devices.sql
+```
+
+## 8. Configure Node-RED
+
+Open:
+
+```text
+http://<server-ip>:1880
+```
+
+Import `flows.json` if it is not already loaded.
+
+Install missing nodes if required:
+
+```text
+node-red-contrib-influxdb
+node-red-contrib-postgresql
+node-red-dashboard
+```
+
+### MQTT
+
+Configure the MQTT input node:
+
+```text
+Broker: your EMQX Cloud broker address
+Port: 1883 or 8883, depending on your EMQX setting
+Client ID: unique value, not reused by MQTTX or STM32
+Topic: pv/device_001/data or pv/+/data
+QoS: 0
+```
+
+Client ID conflicts cause MQTT disconnects such as `Session taken over`.
+
+### InfluxDB Nodes
+
+All InfluxDB nodes must use:
+
+```text
+Version: 2.0
+URL: http://influxdb:8086
+Organization: pv-monitoring
+Bucket: pv_data
+Token: value of INFLUXDB_ADMIN_TOKEN in dashboard/.env
+```
+
+If the token is wrong, Node-RED debug shows:
+
+```text
+unauthorized access
+```
+
+### PostgreSQL Nodes
+
+Use:
+
+```text
+Host: postgres
+Port: 5432
+Database: pv_system
+Username: value of POSTGRES_USER in dashboard/.env
+Password: value of POSTGRES_PASSWORD in dashboard/.env
+```
+
+### Registry and Irradiance Sync
+
+After initializing PostgreSQL:
+
+1. Go to the `Device Registry` flow.
+2. Trigger the registry synchronization inject node.
+3. Confirm the debug message indicates that `device_001` and irradiance points are loaded.
+4. Go to `Solar Irradiance (Open-Meteo)`.
+5. Trigger the live Open-Meteo inject node.
+
+If `irradiance_points is empty` appears, the device registry has not been synchronized.
+
+## 9. Configure Grafana
+
+Open:
+
+```text
+http://<server-ip>:3000
+```
+
+Default login:
+
+```text
+Use the Grafana username and password configured in dashboard/.env
+```
+
+Create or edit the InfluxDB data source:
+
+```text
+Query language: Flux
+URL: http://influxdb:8086
+Organization: pv-monitoring
+Token: value of INFLUXDB_ADMIN_TOKEN in dashboard/.env
+Default bucket: pv_data
+```
+
+Click `Save & test`.
+
+Import:
+
+```text
+grafana-dashboard.json
+```
+
+The dashboard uses 5-minute aggregation for smoother charts and lower query load.
+
+## 10. Verification
+
+### MQTT Reception
+
+In Node-RED debug, check incoming messages from:
+
+```text
+pv/device_001/data
+```
+
+Expected payload:
+
+```json
+{
+  "device_id": "device_001",
+  "voltage": 237.8,
+  "current": 1.23,
+  "power": 278,
+  "active_power": 278,
+  "apparent_power": 292.7,
+  "power_factor": 0.95,
+  "status": true,
+  "temperature": 30.8
+}
+```
+
+### InfluxDB Write
+
+If Grafana shows `unauthorized`, re-check the InfluxDB token in both Grafana and Node-RED.
+
+### Grafana Display
+
+Set time range to `Last 15 minutes` or `Last 1 hour`. Confirm:
+
+- Active power / apparent power / PF
+- Voltage and current
+- Breaker status
+- GHI irradiance
+- Active power vs GHI scatter plot
+
+### PC-Off Test
+
+After deployment, turn off the local computer or disconnect it from the network. Data should continue if:
+
+- STM32 is powered
+- A7670E has cellular network access
+- EMQX Cloud is reachable
+- Tencent Cloud server is running
+
+## 11. Troubleshooting
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| Browser cannot open `:3000` | Local network blocks non-standard ports | Try mobile hotspot or map Grafana to port 80 |
+| Browser cannot open `:1880` | Node-RED firewall port closed | Temporarily open TCP 1880 |
+| Node-RED MQTT disconnects | Duplicate MQTT Client ID | Use unique Client ID for STM32, MQTTX, and Node-RED |
+| Node-RED InfluxDB error `unauthorized access` | Wrong token/org/bucket | Use the values configured in dashboard/.env: `INFLUXDB_ADMIN_TOKEN`, `INFLUXDB_ORG`, and `INFLUXDB_BUCKET` |
+| GHI panel has no data | Device registry not initialized or not synced | Run `init_device_registry.sql`, trigger registry sync |
+| Grafana shows no data after deployment | New cloud InfluxDB is empty | Wait for new MQTT data or publish a test payload |
+| Cloud works but laptop cannot see Node-RED | Port 1880 closed or blocked | Use Grafana for monitoring; open 1880 only when editing flows |

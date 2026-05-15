@@ -1,297 +1,188 @@
-# Custom Server Configuration & Portable Dashboard
+# Custom Server and Migration Guide
 
-This document explains how to migrate the system to any computer and how to switch to a different MQTT broker.
+This guide explains how to reproduce the cloud dashboard on another server or change the MQTT broker.
 
----
+## 1. What Must Keep Running
 
-## 1. Changing the MQTT Broker
+The runtime system requires these cloud-side services:
 
-### 1.1 Broker Options
+```text
+Node-RED
+InfluxDB
+Grafana
+PostgreSQL
+```
 
-| Option | Use Case | Pros | Cons |
-|--------|----------|------|------|
-| broker.emqx.io (current) | Development/testing | Free, no setup | Public, no privacy |
-| Self-hosted Mosquitto | Production deployment | Full control, authentication | Requires server with public IP |
-| Private EMQX deployment | Large-scale deployment | High performance, clustering | Complex configuration |
-| Cloud-managed (AWS IoT Core, etc.) | Commercial deployment | High availability, auto-scaling | Pay per message |
+The MQTT broker may be EMQX Cloud or a self-hosted broker. The local computer is not required after deployment.
 
-### 1.2 Self-Hosted Mosquitto Broker (Recommended)
+## 2. Server Options
 
-**Docker method (simplest):**
+Recommended baseline:
 
-Add to docker-compose.yml:
+```text
+Ubuntu 22.04 LTS
+2 vCPU
+2 GB RAM
+40 GB disk
+Public IPv4 address
+```
+
+Tested provider:
+
+```text
+Tencent Cloud Lighthouse, Frankfurt region
+```
+
+Other suitable options include AWS Lightsail, Alibaba Cloud ECS/Lighthouse, Tencent Cloud Hong Kong/Singapore, or any VPS that supports Docker.
+
+## 3. Migrating to a New Server
+
+### Fresh Deployment
+
+Use this when historical data does not need to be migrated:
+
+```bash
+git clone https://github.com/<your-user>/pv-iot-project.git
+cd pv-iot-project/dashboard
+sudo docker-compose up -d
+sudo docker exec -i postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" < init_device_registry.sql
+```
+
+Then import or verify Node-RED flows and Grafana dashboard.
+
+### Migration With Existing Historical Data
+
+If historical InfluxDB/Grafana/PostgreSQL data must be preserved, stop the stack first:
+
+```bash
+sudo docker-compose down
+```
+
+Then archive and copy these folders:
+
+```text
+dashboard/influxdb/data
+dashboard/influxdb/config
+dashboard/grafana/data
+dashboard/node-red/data
+dashboard/postgres/data
+```
+
+These folders can be large. They are not required for a clean reproducible deployment.
+
+After copying to the new server:
+
+```bash
+sudo chown -R 1000:1000 node-red
+sudo chown -R 472:472 grafana
+sudo chown -R 1000:1000 influxdb
+sudo chown -R 999:999 postgres
+sudo docker-compose up -d
+```
+
+## 4. Changing the MQTT Broker
+
+The current design uses EMQX Cloud as the broker. The broker is responsible for MQTT message forwarding, not long-term data storage.
+
+### Components to Update
+
+When changing broker address or credentials, update:
+
+1. STM32 firmware A7670E MQTT configuration
+2. Node-RED MQTT input node
+3. Node-RED MQTT output node for downlink control
+4. MQTTX test client, if used
+
+### Topic Convention
+
+```text
+Uplink:   pv/device_001/data
+Downlink: pv/device_001/control
+```
+
+Use a unique MQTT Client ID for each client:
+
+```text
+STM32:    pv_device_001_stm32_<uid>
+Node-RED: pv_cloud_nodered_<server>
+MQTTX:    mqttx_debug_<yourname>
+```
+
+Duplicate Client IDs cause broker-side disconnects.
+
+## 5. Self-Hosted MQTT Broker Option
+
+If EMQX Cloud is not used, a Mosquitto broker can be added to the same server.
+
+Example `docker-compose.yml` service:
+
 ```yaml
-  mosquitto:
-    image: eclipse-mosquitto:2
-    ports:
-      - "1883:1883"
-      - "9001:9001"
-    volumes:
-      - ./mosquitto/config:/mosquitto/config
-      - mosquitto-data:/mosquitto/data
-      - mosquitto-log:/mosquitto/log
+mosquitto:
+  image: eclipse-mosquitto:2
+  container_name: mosquitto
+  restart: always
+  ports:
+    - "1883:1883"
+  volumes:
+    - ./mosquitto/config:/mosquitto/config
+    - ./mosquitto/data:/mosquitto/data
+    - ./mosquitto/log:/mosquitto/log
 ```
 
-Create `mosquitto/config/mosquitto.conf`:
-```
+Minimal `mosquitto/config/mosquitto.conf`:
+
+```text
 listener 1883
 allow_anonymous true
 persistence true
 persistence_location /mosquitto/data/
-log_dest file /mosquitto/log/mosquitto.log
 ```
 
-To enable authentication, set `allow_anonymous` to `false` and add:
-```
-password_file /mosquitto/config/passwd
-```
+For production, disable anonymous access and use username/password authentication.
 
-Generate password file:
-```bash
-docker exec -it mosquitto mosquitto_passwd -c /mosquitto/config/passwd admin
-```
+## 6. Firewall Recommendations
 
-**Manual installation (Linux):**
-```bash
-sudo apt install mosquitto mosquitto-clients -y
-sudo systemctl enable mosquitto
-sudo systemctl start mosquitto
+| Port | Service | Public? |
+|------|---------|---------|
+| 22 | SSH | Yes, preferably limited to trusted IPs |
+| 1883 | MQTT | Only if self-hosting MQTT |
+| 3000 | Grafana | Yes, if remote viewing is required |
+| 1880 | Node-RED editor | Temporary only |
+| 8086 | InfluxDB | No |
+| 5432 | PostgreSQL | No |
 
-# Test
-mosquitto_pub -h localhost -t test -m "hello"
-mosquitto_sub -h localhost -t test
-```
+Node-RED continues running after port `1880` is closed. The port only controls public access to the editor.
 
-### 1.3 Update Broker Address in All Components
+## 7. Backup
 
-After switching brokers, update the address in these three locations:
-
-**① STM32 Firmware**
-
-Edit `a7670e.c`:
-```c
-#define MQTT_BROKER_HOST    "your-server-IP-or-domain"
-#define MQTT_BROKER_PORT    1883
-#define A7670E_MQTT_CLIENT_ID "pv_device_001_stm32"
-#define A7670E_MQTT_USERNAME  "your-username"   // leave "" if no auth
-#define A7670E_MQTT_PASSWORD  "your-password"   // leave "" if no auth
-```
-Recompile and flash the firmware.
-
-**② Node-RED**
-
-1. Open http://localhost:1880
-2. Double-click any MQTT node → Edit Server configuration
-3. Change Server to the new broker address
-4. If authentication is enabled, enter username and password
-5. Click Update → Done → Deploy
-
-MQTT nodes to update:
-- Flow 2: MQTT In node (subscribes to `pv/+/data`)
-- Flow 3: MQTT Out node (publishes to `pv/{device_id}/control`)
-- Simulator: MQTT Out node
-
-**③ Verify Connection**
+For a quick backup:
 
 ```bash
-# Subscribe on the new broker
-mosquitto_sub -h your-server-IP -t "pv/#" -v
-
-# Check Node-RED debug panel for incoming messages
-# Check STM32 serial log for "MQTT connected to new-address:1883"
+cd dashboard
+sudo docker-compose down
+tar czf pv-dashboard-backup.tar.gz influxdb grafana node-red postgres docker-compose.yml
+sudo docker-compose up -d
 ```
 
----
+For a small reproducible archive without historical data, keep only:
 
-## 2. Installing the Dashboard on Any Computer
-
-### Method 1: Using Docker (Recommended — 5 minutes)
-
-**Prerequisites:**
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed
-- Minimum 4 GB available RAM
-
-**Steps:**
-
-```bash
-# 1. Clone the repository
-git clone https://github.com/csmdqq-source/pv-iot-project.git
-cd pv-iot-project/dashboard
-
-# 2. Start all services
-docker-compose up -d
-
-# 3. Wait ~30 seconds, check status
-docker ps    # Should show 4 containers in Running state
-
-# 4. Import Node-RED flows
-#    Open http://localhost:1880
-#    Menu → Import → Upload flows.json → Deploy
-
-# 5. Import Grafana dashboard
-#    Open http://localhost:3000 (admin / admin123)
-#    Dashboards → Import → Upload grafana-dashboard.json
-
-# 6. Initialize PostgreSQL
-docker exec -i postgres psql -U admin -d pv_system < insert_devices.sql
-
-# 7. Update MQTT broker address if not using the public broker
-#    Edit MQTT node Server configuration in Node-RED
+```text
+docker-compose.yml
+flows.json
+grafana-dashboard.json
+init_device_registry.sql
+insert_devices.sql
 ```
 
-**Stop and restart:**
-```bash
-docker-compose stop     # Stop (data preserved)
-docker-compose start    # Restart
-docker-compose down     # Stop and remove containers (volumes preserved)
-docker-compose down -v  # Stop and delete all data (use with caution)
-```
+## 8. Verification Checklist
 
-### Method 2: Manual Installation (Without Docker)
+After migration or broker changes:
 
-For environments where Docker is unavailable.
-
-**2.1 Install Node-RED**
-```bash
-# Install Node.js (v18+)
-curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
-sudo apt install nodejs -y
-
-# Install Node-RED
-sudo npm install -g node-red
-
-# Install required nodes
-cd ~/.node-red
-npm install node-red-contrib-influxdb node-red-dashboard node-red-node-postgresql
-
-# Start
-node-red
-# Access at http://localhost:1880
-```
-
-**2.2 Install InfluxDB**
-```bash
-# Ubuntu/Debian
-wget https://dl.influxdata.com/influxdb/releases/influxdb2_2.7.1-1_amd64.deb
-sudo dpkg -i influxdb2_2.7.1-1_amd64.deb
-sudo systemctl enable influxdb
-sudo systemctl start influxdb
-
-# Initialize
-influx setup \
-  --username admin \
-  --password admin123456 \
-  --org pv-monitoring \
-  --bucket pv_data \
-  --token my-super-secret-token-12345 \
-  --force
-
-# Access at http://localhost:8086
-```
-
-**2.3 Install Grafana**
-```bash
-# Ubuntu/Debian
-sudo apt install -y software-properties-common
-wget -q -O - https://packages.grafana.com/gpg.key | sudo apt-key add -
-echo "deb https://packages.grafana.com/oss/deb stable main" | sudo tee /etc/apt/sources.list.d/grafana.list
-sudo apt update
-sudo apt install grafana -y
-sudo systemctl enable grafana-server
-sudo systemctl start grafana-server
-
-# Access at http://localhost:3000 (admin / admin)
-```
-
-**2.4 Install PostgreSQL**
-```bash
-sudo apt install postgresql -y
-sudo -u postgres psql
-
-# Inside psql
-CREATE USER admin WITH PASSWORD 'admin123456';
-CREATE DATABASE pv_system OWNER admin;
-\q
-
-# Import schema and data
-psql -U admin -d pv_system -f create_tables.sql
-psql -U admin -d pv_system -f insert_devices.sql
-```
-
-**2.5 Configure Connections**
-
-For manual installation, all services use `localhost`:
-- Node-RED MQTT: `broker.emqx.io:1883` (or your custom broker)
-- Node-RED → InfluxDB: `http://localhost:8086`
-- Node-RED → PostgreSQL: `localhost:5432`
-- Grafana → InfluxDB: `http://localhost:8086`
-
----
-
-## 3. Minimum System Requirements
-
-| Resource | Docker Method | Manual Installation |
-|----------|--------------|-------------------|
-| OS | Windows 10+, Ubuntu 20.04+, macOS | Ubuntu 20.04+ (recommended) |
-| RAM | 4 GB+ | 2 GB+ |
-| Disk | 10 GB free | 5 GB free |
-| CPU | Dual-core+ | Dual-core+ |
-| Network | Internet required (MQTT + Open-Meteo API) | Same |
-
----
-
-## 4. Firewall & Port Configuration
-
-If the dashboard needs to be accessed from other devices (e.g., viewing Grafana on a phone), open these ports:
-
-| Port | Service | Required? |
-|------|---------|-----------|
-| 1880 | Node-RED | Optional (admin only) |
-| 1883 | MQTT Broker | Required (if self-hosted) |
-| 3000 | Grafana | Required (dashboard access) |
-| 8086 | InfluxDB | Optional (debugging only) |
-| 5432 | PostgreSQL | Optional (admin only) |
-
-**Linux firewall:**
-```bash
-sudo ufw allow 3000/tcp    # Grafana
-sudo ufw allow 1883/tcp    # MQTT (if self-hosted)
-```
-
-**Windows firewall:** Control Panel → Windows Defender Firewall → Advanced Settings → Inbound Rules → New Rule → Port → Add 3000 and 1883.
-
----
-
-## 5. Data Backup & Restore
-
-### 5.1 Docker Backup
-```bash
-# Backup all data volumes
-docker-compose stop
-docker run --rm -v pv-iot-project_influxdb-data:/data -v $(pwd):/backup alpine tar czf /backup/influxdb-backup.tar.gz /data
-docker run --rm -v pv-iot-project_grafana-data:/data -v $(pwd):/backup alpine tar czf /backup/grafana-backup.tar.gz /data
-docker run --rm -v pv-iot-project_nodered-data:/data -v $(pwd):/backup alpine tar czf /backup/nodered-backup.tar.gz /data
-docker run --rm -v pv-iot-project_postgres-data:/data -v $(pwd):/backup alpine tar czf /backup/postgres-backup.tar.gz /data
-docker-compose start
-```
-
-### 5.2 Restore
-```bash
-docker-compose stop
-docker run --rm -v pv-iot-project_influxdb-data:/data -v $(pwd):/backup alpine tar xzf /backup/influxdb-backup.tar.gz -C /
-# Repeat for other volumes
-docker-compose start
-```
-
----
-
-## 6. Migration Checklist
-
-1. [ ] Install Docker Desktop on the new computer
-2. [ ] Clone the GitHub repository
-3. [ ] Run `docker-compose up -d`
-4. [ ] Import Node-RED flows.json and configure MQTT broker address
-5. [ ] Import Grafana dashboard JSON and configure InfluxDB data source
-6. [ ] Initialize PostgreSQL schema and device data
-7. [ ] Update MQTT broker address in STM32 firmware (if changed)
-8. [ ] Verify: Node-RED receives data → InfluxDB has records → Grafana displays charts
+- Node-RED MQTT node is connected.
+- Node-RED debug receives `pv/device_001/data`.
+- InfluxDB write nodes do not show `unauthorized access`.
+- PostgreSQL contains `device_001`.
+- Registry synchronization flow has been triggered.
+- Open-Meteo flow produces GHI data.
+- Grafana data source `Save & test` succeeds.
+- Grafana panels show new data in `Last 15 minutes`.

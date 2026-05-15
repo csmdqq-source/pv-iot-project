@@ -567,7 +567,7 @@
               "mode": "off"
             }
           },
-          "decimals": 1,
+          "decimals": 2,
           "mappings": [],
           "thresholds": {
             "mode": "absolute",
@@ -584,7 +584,93 @@
           },
           "unit": "watt"
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "active_power"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Active Power (W)"
+              },
+              {
+                "id": "unit",
+                "value": "watt"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "green"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "apparent_power"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Apparent Power (VA)"
+              },
+              {
+                "id": "unit",
+                "value": "voltamp"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "orange"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "power_factor"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Power Factor"
+              },
+              {
+                "id": "unit",
+                "value": "none"
+              },
+              {
+                "id": "decimals",
+                "value": 3
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              },
+              {
+                "id": "custom.axisSoftMin",
+                "value": 0
+              },
+              {
+                "id": "custom.axisSoftMax",
+                "value": 1
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "blue"
+                }
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 8,
@@ -609,11 +695,11 @@
       "pluginVersion": "12.3.0",
       "targets": [
         {
-          "query": "from(bucket: \"pv_data\")\r\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\r\n  |> filter(fn: (r) => r[\"_measurement\"] == \"breaker_data\")\r\n  |> filter(fn: (r) => r[\"_field\"] == \"power\") // 或者是 voltage/current\r\n  |> filter(fn: (r) => r[\"device_id\"] == \"${device_id}\")\r\n  // ✨ 核心修正：丢弃会变动的标签，这样所有数据就会合并到一条线上\r\n  |> drop(columns: [\"latitude\", \"longitude\", \"region\"]) \r\n  |> aggregateWindow(every: 10s, fn: mean, createEmpty: false)\r\n  |> yield(name: \"mean\")",
-          "refId": "A"
+          "refId": "A",
+          "query": "from(bucket: \"pv_data\")\r\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\r\n  |> filter(fn: (r) => r[\"_measurement\"] == \"breaker_data\")\r\n  |> filter(fn: (r) => r[\"_field\"] == \"active_power\" or r[\"_field\"] == \"apparent_power\" or r[\"_field\"] == \"power_factor\")\r\n  |> filter(fn: (r) => r[\"device_id\"] == \"${device_id}\")\r\n  |> drop(columns: [\"latitude\", \"longitude\", \"region\"])\r\n  |> aggregateWindow(every: 5m, fn: mean, createEmpty: false)\r\n  |> yield(name: \"mean\")"
         }
       ],
-      "title": "实时功率 (W)",
+      "title": "Active / Apparent Power & PF",
       "type": "timeseries"
     },
     {
@@ -735,7 +821,7 @@
             "y": {
               "matcher": {
                 "id": "byName",
-                "options": "power"
+                "options": "active_power"
               }
             }
           }
@@ -749,11 +835,11 @@
       "pluginVersion": "12.3.0",
       "targets": [
         {
-          "query": "from(bucket: \"pv_data\")\r\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\r\n  |> filter(fn: (r) => r[\"_measurement\"] == \"pv_correlation\")\r\n  |> filter(fn: (r) => r[\"device_id\"] == \"${device_id}\")\r\n  |> filter(fn: (r) => r[\"_field\"] == \"ghi\" or r[\"_field\"] == \"power\")\r\n  |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")",
+          "query": "from(bucket: \"pv_data\")\r\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\r\n  |> filter(fn: (r) => r[\"_measurement\"] == \"pv_correlation\")\r\n  |> filter(fn: (r) => r[\"device_id\"] == \"${device_id}\")\r\n  |> filter(fn: (r) => r[\"_field\"] == \"ghi\" or r[\"_field\"] == \"active_power\")\r\n  |> aggregateWindow(every: 5m, fn: mean, createEmpty: false)\r\n  |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")",
           "refId": "A"
         }
       ],
-      "title": "功率/辐照度 ",
+      "title": "Active Power / Irradiance",
       "type": "xychart"
     },
     {
@@ -853,7 +939,7 @@
       "pluginVersion": "12.3.0",
       "targets": [
         {
-          "query": "from(bucket: \"pv_data\")\r\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\r\n  |> filter(fn: (r) => r[\"_measurement\"] == \"breaker_data\")\r\n  |> filter(fn: (r) => r[\"_field\"] == \"voltage\")\r\n  |> filter(fn: (r) => r[\"device_id\"] == \"${device_id}\")\r\n  // 核心修正：丢弃会变动的标签，合并序列\r\n  |> drop(columns: [\"latitude\", \"longitude\", \"region\"]) \r\n  |> aggregateWindow(every: 10s, fn: mean, createEmpty: false)\r\n  |> yield(name: \"voltage\")",
+          "query": "from(bucket: \"pv_data\")\r\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\r\n  |> filter(fn: (r) => r[\"_measurement\"] == \"breaker_data\")\r\n  |> filter(fn: (r) => r[\"_field\"] == \"voltage\")\r\n  |> filter(fn: (r) => r[\"device_id\"] == \"${device_id}\")\r\n  // 核心修正：丢弃会变动的标签，合并序列\r\n  |> drop(columns: [\"latitude\", \"longitude\", \"region\"]) \r\n  |> aggregateWindow(every: 5m, fn: mean, createEmpty: false)\r\n  |> yield(name: \"voltage\")",
           "refId": "A"
         },
         {
@@ -862,7 +948,7 @@
             "uid": "bfb2mha05j75se"
           },
           "hide": false,
-          "query": "from(bucket: \"pv_data\")\r\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\r\n  |> filter(fn: (r) => r[\"_measurement\"] == \"breaker_data\")\r\n  |> filter(fn: (r) => r[\"_field\"] == \"current\")\r\n  |> filter(fn: (r) => r[\"device_id\"] == \"${device_id}\")\r\n  // 核心修正：丢弃会变动的标签，合并序列\r\n  |> drop(columns: [\"latitude\", \"longitude\", \"region\"]) \r\n  |> aggregateWindow(every: 10s, fn: mean, createEmpty: false)\r\n  |> yield(name: \"current\")",
+          "query": "from(bucket: \"pv_data\")\r\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\r\n  |> filter(fn: (r) => r[\"_measurement\"] == \"breaker_data\")\r\n  |> filter(fn: (r) => r[\"_field\"] == \"current\")\r\n  |> filter(fn: (r) => r[\"device_id\"] == \"${device_id}\")\r\n  // 核心修正：丢弃会变动的标签，合并序列\r\n  |> drop(columns: [\"latitude\", \"longitude\", \"region\"]) \r\n  |> aggregateWindow(every: 5m, fn: mean, createEmpty: false)\r\n  |> yield(name: \"current\")",
           "refId": "B"
         }
       ],
@@ -984,7 +1070,7 @@
       "pluginVersion": "12.3.0",
       "targets": [
         {
-          "query": "deviceRegion = from(bucket: \"pv_data\")\r\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\r\n  |> filter(fn: (r) => r._measurement == \"breaker_data\")\r\n  |> filter(fn: (r) => r.device_id == \"${device_id}\")\r\n  |> filter(fn: (r) => r._field == \"power\")\r\n  |> group()\r\n  |> sort(columns: [\"_time\"], desc: true)\r\n  |> limit(n: 1)\r\n  |> findRecord(fn: (key) => true, idx: 0)\r\n\r\nfrom(bucket: \"pv_data\")\r\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\r\n  |> filter(fn: (r) => r._measurement == \"openmeteo_irradiance\")\r\n  |> filter(fn: (r) => r._field == \"ghi\")\r\n  |> filter(fn: (r) => r[\"data_type\"] == \"actual\")\r\n  |> filter(fn: (r) => r[\"location\"] == deviceRegion.region)",
+          "query": "deviceRegion = from(bucket: \"pv_data\")\r\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\r\n  |> filter(fn: (r) => r._measurement == \"breaker_data\")\r\n  |> filter(fn: (r) => r.device_id == \"${device_id}\")\r\n  |> filter(fn: (r) => r._field == \"power\")\r\n  |> group()\r\n  |> sort(columns: [\"_time\"], desc: true)\r\n  |> limit(n: 1)\r\n  |> findRecord(fn: (key) => true, idx: 0)\r\n\r\nfrom(bucket: \"pv_data\")\r\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\r\n  |> filter(fn: (r) => r._measurement == \"openmeteo_irradiance\")\r\n  |> filter(fn: (r) => r._field == \"ghi\")\r\n  |> filter(fn: (r) => r[\"data_type\"] == \"actual\")\r\n  |> filter(fn: (r) => r[\"location\"] == deviceRegion.region)\r\n  |> aggregateWindow(every: 5m, fn: mean, createEmpty: false)\r\n  |> yield(name: \"ghi_5m\")",
           "refId": "A"
         }
       ],

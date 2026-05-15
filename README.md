@@ -1,166 +1,164 @@
-# STM32WB5MM-DK Firmware Installation Guide
+# PV IoT Monitoring System
 
-## 1. Development Environment Setup
+This repository contains a reproducible implementation of a photovoltaic monitoring IoT system based on an STM32WB5MM Zigbee gateway, an A7670E LTE Cat-1 module, EMQX Cloud MQTT, Node-RED, InfluxDB, PostgreSQL, and Grafana.
 
-### Required Tools
-| Tool | Version | Purpose |
-|------|---------|---------|
-| STM32CubeIDE | 1.13+ | Compile and flash firmware |
-| STM32CubeMX | 6.9+ | Pin configuration and code generation |
-| ST-LINK Driver | V2 | USB debugger driver |
-| Serial Terminal | Tera Term / PuTTY | View debug logs |
+The system was validated with a real smart circuit breaker reporting voltage, current, active power, apparent power, power factor, switch status, and temperature. Cloud processing is deployed on an Ubuntu server using Docker Compose, so the data pipeline continues to run even when the local development computer is turned off.
 
-### Installation Steps
-1. Download and install [STM32CubeIDE](https://www.st.com/en/development-tools/stm32cubeide.html)
-2. Install ST-LINK USB driver (prompted during IDE installation)
-3. Connect the STM32WB5MM-DK board via USB cable (use the USB ST-LINK port, not USB USER)
-4. Open Device Manager and confirm "STMicroelectronics STLink Virtual COM Port" is recognized
+## System Architecture
 
-## 2. Firmware Configuration
-
-### 2.1 Zigbee Configuration
-- Role: **Coordinator** (creates and manages the network)
-- Channel: Auto-select
-- Join Policy: Permit Join enabled for 60 seconds after power-on
-- Breaker Cluster Configuration:
-  - Cluster 0xEF00 (Tuya private protocol) — receive electrical data
-  - ZCL OnOff Cluster — send ON/OFF control commands
-
-### 2.2 LPUART1 Configuration (Communication with A7670E)
-```
-Pin Assignment:
-  PB5 (Pin 19) → LPUART1_TX → Connect to A7670E RXD
-  PC0 (Pin 12) → LPUART1_RX → Connect to A7670E TXD
-  GND           → Common ground
-
-UART Parameters:
-  Baud rate: 115200
-  Data bits: 8
-  Stop bits: 1
-  Parity:    None
-  Flow ctrl: None
+```text
+Smart breaker
+  -> Zigbee / Tuya EF00
+  -> STM32WB5MM gateway
+  -> A7670E LTE Cat-1
+  -> EMQX Cloud MQTT
+  -> Node-RED on cloud server
+  -> InfluxDB
+  -> Grafana dashboard
 ```
 
-### 2.3 UART Ring Buffer
-The firmware implements a circular ring buffer for LPUART1 reception to prevent data loss during high-throughput periods (e.g., when A7670E sends URC notifications while the MCU is processing Zigbee data). The ring buffer is configured with a default size of 512 bytes and uses DMA-based reception with idle line detection to trigger buffer reads. This ensures no incoming bytes are dropped even when the main loop is busy with Zigbee stack processing or OLED display updates.
+Cloud-side irradiance is obtained from the Open-Meteo API. Node-RED merges measured active power with GHI and calculates PR-based fault indicators.
 
-### 2.4 Key Constants
-Modify the following constants in the firmware source code:
+## Repository Structure
 
-```c
-// MQTT configuration in a7670e.h
-#define MQTT_BROKER_HOST    "broker.emqx.io"
-#define MQTT_BROKER_PORT    1883
-#define MQTT_CLIENT_PREFIX  "pv_device_001_stm32_"
-#define MQTT_PUB_TOPIC      "pv/device_001/data"
-#define MQTT_SUB_TOPIC      "pv/device_001/control"
-#define MQTT_PUB_INTERVAL   10000  // Publish interval in milliseconds
+```text
+README.md
+hardware/
+  BOM_list.md
+  system_architecture.png
+  wiring diagrams,.png
+  photos of the assembled system.png
+  STM32-schematic.pdf
+stm32-firmware/
+  README.md
+  Zigbee_OnOff_Server_Coord/
+dashboard/
+  docker-compose.yml
+  flows.json
+  grafana-dashboard.json
+  init_device_registry.sql
+  insert_devices.sql
+  README.md
+docs/
+  install-stm32.md
+  install-dashboard.md
+  custom-server.md
 ```
 
-To switch to a different MQTT broker, only `MQTT_BROKER_HOST` and `MQTT_BROKER_PORT` need to be changed.
+## Hardware Requirements
 
-### 2.5 Flash Zigbee Wireless Stack (First-Time Only)
-The STM32WB M0+ core requires a pre-compiled Zigbee stack binary. This only needs to be done once per board.
+- STM32WB5MM-DK development board
+- A7670E LTE Cat-1 module with antenna and valid SIM data service
+- TOWSMR1-40 Zigbee smart circuit breaker
+- 5 V USB power supply
+- AC resistive load or PV/inverter output for validation
+- Optional: MQTTX for MQTT debugging
 
-Open STM32CubeProgrammer
-Connect to the board via ST-LINK (USB)
-Left menu → Firmware Upgrade Services (FUS)
-Select file: stm32wb5x_Zigbee_FFD_fw.bin
+## Software Requirements
 
-Location: STM32Cube_FW_WB/Projects/STM32WB_Copro_Wireless_Binaries/STM32WB5x/stm32wb5x_Zigbee_FFD_fw.bin
-Download from ST official FW package if not available locally
+- STM32CubeIDE for firmware build and flashing
+- Docker and docker-compose on the cloud server
+- A cloud Ubuntu server, tested with:
+  - Tencent Cloud Lighthouse
+  - Region: Frankfurt
+  - Ubuntu 22.04 LTS
+  - 2 vCPU / 2 GB RAM / 40 GB SSD
+- EMQX Cloud MQTT broker
 
+## Quick Start
 
-Click Firmware Upgrade, wait for completion
-Board will reset automatically
+1. Flash the STM32 firmware.
 
-Without this step, Zigbee communication will not function.
+   See [docs/install-stm32.md](docs/install-stm32.md).
 
-## 3. Compile and Flash
+2. Prepare the cloud server and start the dashboard stack.
 
-### 3.1 Open Project
-1. Launch STM32CubeIDE
-2. File → Import → Existing Projects into Workspace
-3. Select the firmware project folder (containing the `.project` file)
-4. Click Finish
+   See [docs/install-dashboard.md](docs/install-dashboard.md).
 
-### 3.2 Build
-1. Right-click the project → Build Project (or Ctrl+B)
-2. Verify the Console displays `Build Finished. 0 errors`
-3. The compiled binary is located in the `Debug/` or `Release/` directory
+3. Configure the MQTT broker in Node-RED.
 
-### 3.3 Flash
-1. Ensure the board is connected via USB and recognized
-2. Run → Debug As → STM32 C/C++ Application
-3. Select ST-LINK when prompted for the first time
-4. Wait for flashing to complete; the firmware starts automatically
+   The default uplink topic is:
 
-## 4. First Test
+   ```text
+   pv/device_001/data
+   ```
 
-### 4.1 Verify Zigbee Pairing
-1. Open a serial terminal, connect to the STM32 virtual COM port (baud rate 115200)
-2. Power on the STM32
-3. Power on the TOWSMR1-40 breaker
-4. Wait for the following log output (approximately 10–20 seconds):
+   The default downlink control topic is:
 
-```
-[M4 APPLICATION] Send command Permit join during 60s
-[M4 APPLICATION] Device joined: 0x6d38
-[M4 APPLICATION] Tuya device detected (0xEF00)
-[M4 APPLICATION] Tuya binding SUCCESS!
-[M4 APPLICATION] Coordinator can now receive DP reports
-```
+   ```text
+   pv/device_001/control
+   ```
 
-`Tuya binding SUCCESS!` confirms successful Zigbee pairing.
+4. Initialize the device registry.
 
-### 4.2 Verify MQTT Connection
-After pairing, the A7670E module automatically connects to the MQTT broker:
+   ```bash
+   cd dashboard
+   sudo docker exec -i postgres psql -U admin -d pv_system < init_device_registry.sql
+   ```
 
-```
-[A7670E] ACCQ OK
-[A7670E] MQTT connected to broker.emqx.io:1883
-[A7670E] Subscribed to: pv/device_001/control
-[POWER] V=239.2V I=0mA P=0.0W
-```
+5. Open Grafana.
 
-`MQTT connected` and `Subscribed to` confirm a successful MQTT session.
+   ```text
+   http://<server-ip>:3000
+   ```
 
-### 4.3 Verify Data Publishing
-On another computer, use an MQTT client (e.g., MQTTX) to subscribe to `pv/device_001/data`. You should receive JSON payloads:
+   Default login:
+
+   ```text
+   Use the Grafana account configured in `dashboard/.env`.
+   ```
+
+6. Verify that Node-RED receives MQTT messages and Grafana displays active power, apparent power, power factor, voltage, current, and GHI.
+
+## MQTT Payload
+
+The current firmware publishes one JSON payload to `pv/device_001/data`:
 
 ```json
 {
   "device_id": "device_001",
-  "voltage": 239.2,
-  "current": 0.0,
-  "power": 0.0,
-  "status": 1,
-  "temperature": 31.6
+  "timestamp": 1550,
+  "voltage": 237.8,
+  "current": 1.23,
+  "power": 278,
+  "active_power": 278,
+  "apparent_power": 292.7,
+  "power_factor": 0.95,
+  "status": true,
+  "efficiency": 0.5,
+  "temperature": 30.8
 }
 ```
 
-## 5. Hardware Wiring Summary
+`power` is retained for backward compatibility and is treated as active power.
 
-```
-STM32WB5MM-DK        A7670E 4G Module
-  PB5 (TX)  --------→  RXD
-  PC0 (RX)  ←--------  TXD
-  GND       ←-------→  GND
+## Verified Cloud Deployment
 
-Power: Both devices share a single DC 5V USB power source
+The system has been reproduced on a Tencent Cloud Ubuntu server. The local computer is only used for configuration and debugging. Once deployed, the cloud services continue to run independently:
 
-STM32 Antenna: Built-in PCB antenna (integrated in STM32WB5MMG module)
-A7670E Antenna: External 4G wideband antenna (SMA connector)
-
-TOWSMR1-40 Breaker: Connected wirelessly via Zigbee, wired in series with 240V AC line
+```text
+Node-RED -> InfluxDB -> Grafana -> browser / phone
 ```
 
-## 6. Troubleshooting
+The local computer may be turned off after deployment. Real hardware data continues only if the STM32 gateway is powered and the A7670E SIM card can still access the cellular network.
 
-| Issue | Solution |
-|-------|----------|
-| Zigbee pairing fails | Power cycle both STM32 and breaker, wait 60 seconds |
-| MQTT connection timeout | Check A7670E 4G antenna connection and SIM card data plan |
-| No serial output | Ensure USB is connected to ST-LINK port, baud rate set to 115200 |
-| Build errors | Verify STM32CubeIDE version ≥ 1.13 and Zigbee libraries are installed |
-| Re-pairing needed after power loss | Normal behavior — STM32 Zigbee state is not persisted across reboots |
+## Security Notes
+
+For cloud deployment, open only the ports needed for operation:
+
+| Port | Service | Recommendation |
+|------|---------|----------------|
+| 22 | SSH | Keep open for administration |
+| 3000 | Grafana | Keep open if remote dashboard access is required |
+| 1880 | Node-RED editor | Open only during debugging, then close |
+| 8086 | InfluxDB | Do not expose publicly |
+| 5432 | PostgreSQL | Do not expose publicly |
+
+Change the default Grafana password before long-term operation.
+
+## Documentation
+
+- [STM32 firmware installation](docs/install-stm32.md)
+- [Cloud dashboard installation](docs/install-dashboard.md)
+- [Custom server and migration guide](docs/custom-server.md)
+- [Dashboard package notes](dashboard/README.md)
