@@ -1,166 +1,115 @@
-# STM32WB5MM-DK Firmware Installation Guide
+# STM32 Firmware Package
 
-## 1. Development Environment Setup
+This folder contains the STM32 gateway firmware project used in the PV IoT monitoring prototype.
 
-### Required Tools
-| Tool | Version | Purpose |
-|------|---------|---------|
-| STM32CubeIDE | 1.13+ | Compile and flash firmware |
-| STM32CubeMX | 6.9+ | Pin configuration and code generation |
-| ST-LINK Driver | V2 | USB debugger driver |
-| Serial Terminal | Tera Term / PuTTY | View debug logs |
+The firmware runs on an STM32WB5MM-DK board configured as a Zigbee coordinator. It receives Tuya EF00 data from the TOWSMR1-40 Zigbee smart breaker, formats the electrical measurements, and sends them to the cloud through an A7670E LTE Cat-1 module using MQTT.
 
-### Installation Steps
-1. Download and install [STM32CubeIDE](https://www.st.com/en/development-tools/stm32cubeide.html)
-2. Install ST-LINK USB driver (prompted during IDE installation)
-3. Connect the STM32WB5MM-DK board via USB cable (use the USB ST-LINK port, not USB USER)
-4. Open Device Manager and confirm "STMicroelectronics STLink Virtual COM Port" is recognized
+## Firmware Role
 
-## 2. Firmware Configuration
-
-### 2.1 Zigbee Configuration
-- Role: **Coordinator** (creates and manages the network)
-- Channel: Auto-select
-- Join Policy: Permit Join enabled for 60 seconds after power-on
-- Breaker Cluster Configuration:
-  - Cluster 0xEF00 (Tuya private protocol) — receive electrical data
-  - ZCL OnOff Cluster — send ON/OFF control commands
-
-### 2.2 LPUART1 Configuration (Communication with A7670E)
-```
-Pin Assignment:
-  PB5 (Pin 19) → LPUART1_TX → Connect to A7670E RXD
-  PC0 (Pin 12) → LPUART1_RX → Connect to A7670E TXD
-  GND           → Common ground
-
-UART Parameters:
-  Baud rate: 115200
-  Data bits: 8
-  Stop bits: 1
-  Parity:    None
-  Flow ctrl: None
+```text
+TOWSMR1-40 smart breaker
+  -> Zigbee / Tuya EF00
+  -> STM32WB5MM-DK coordinator
+  -> UART AT commands
+  -> A7670E LTE Cat-1
+  -> EMQX Cloud MQTT
 ```
 
-### 2.3 UART Ring Buffer
-The firmware implements a circular ring buffer for LPUART1 reception to prevent data loss during high-throughput periods (e.g., when A7670E sends URC notifications while the MCU is processing Zigbee data). The ring buffer is configured with a default size of 512 bytes and uses DMA-based reception with idle line detection to trigger buffer reads. This ensures no incoming bytes are dropped even when the main loop is busy with Zigbee stack processing or OLED display updates.
+## Development Tools
 
-### 2.4 Key Constants
-Modify the following constants in the firmware source code:
+| Tool | Purpose |
+|------|---------|
+| STM32CubeIDE | Open, build, and flash the project |
+| STM32CubeProgrammer | Flash or update the STM32WB wireless stack if required |
+| Serial terminal | Observe debug logs from the gateway |
+| MQTTX | Optional MQTT verification client |
 
-```c
-// MQTT configuration in a7670e.h
-#define MQTT_BROKER_HOST    "broker.emqx.io"
-#define MQTT_BROKER_PORT    1883
-#define MQTT_CLIENT_PREFIX  "pv_device_001_stm32_"
-#define MQTT_PUB_TOPIC      "pv/device_001/data"
-#define MQTT_SUB_TOPIC      "pv/device_001/control"
-#define MQTT_PUB_INTERVAL   10000  // Publish interval in milliseconds
+## Project Location
+
+Open this project in STM32CubeIDE:
+
+```text
+stm32-firmware/Zigbee_OnOff_Server_Coord/STM32CubeIDE
 ```
 
-To switch to a different MQTT broker, only `MQTT_BROKER_HOST` and `MQTT_BROKER_PORT` need to be changed.
+The source files most relevant to the cloud upload are:
 
-### 2.5 Flash Zigbee Wireless Stack (First-Time Only)
-The STM32WB M0+ core requires a pre-compiled Zigbee stack binary. This only needs to be done once per board.
-
-Open STM32CubeProgrammer
-Connect to the board via ST-LINK (USB)
-Left menu → Firmware Upgrade Services (FUS)
-Select file: stm32wb5x_Zigbee_FFD_fw.bin
-
-Location: STM32Cube_FW_WB/Projects/STM32WB_Copro_Wireless_Binaries/STM32WB5x/stm32wb5x_Zigbee_FFD_fw.bin
-Download from ST official FW package if not available locally
-
-
-Click Firmware Upgrade, wait for completion
-Board will reset automatically
-
-Without this step, Zigbee communication will not function.
-
-## 3. Compile and Flash
-
-### 3.1 Open Project
-1. Launch STM32CubeIDE
-2. File → Import → Existing Projects into Workspace
-3. Select the firmware project folder (containing the `.project` file)
-4. Click Finish
-
-### 3.2 Build
-1. Right-click the project → Build Project (or Ctrl+B)
-2. Verify the Console displays `Build Finished. 0 errors`
-3. The compiled binary is located in the `Debug/` or `Release/` directory
-
-### 3.3 Flash
-1. Ensure the board is connected via USB and recognized
-2. Run → Debug As → STM32 C/C++ Application
-3. Select ST-LINK when prompted for the first time
-4. Wait for flashing to complete; the firmware starts automatically
-
-## 4. First Test
-
-### 4.1 Verify Zigbee Pairing
-1. Open a serial terminal, connect to the STM32 virtual COM port (baud rate 115200)
-2. Power on the STM32
-3. Power on the TOWSMR1-40 breaker
-4. Wait for the following log output (approximately 10–20 seconds):
-
-```
-[M4 APPLICATION] Send command Permit join during 60s
-[M4 APPLICATION] Device joined: 0x6d38
-[M4 APPLICATION] Tuya device detected (0xEF00)
-[M4 APPLICATION] Tuya binding SUCCESS!
-[M4 APPLICATION] Coordinator can now receive DP reports
+```text
+Core/Src/a7670e.c
+Core/Inc/a7670e.h
+STM32_WPAN/App/app_zigbee.c
 ```
 
-`Tuya binding SUCCESS!` confirms successful Zigbee pairing.
+## MQTT Configuration
 
-### 4.2 Verify MQTT Connection
-After pairing, the A7670E module automatically connects to the MQTT broker:
+Before flashing to a real device, configure the MQTT broker and topics in the firmware source where the A7670E MQTT constants are defined.
 
+Use placeholders in the public repository. Do not commit real EMQX usernames, passwords, or private tokens.
+
+Expected topics:
+
+```text
+Uplink:   pv/device_001/data
+Downlink: pv/device_001/control
 ```
-[A7670E] ACCQ OK
-[A7670E] MQTT connected to broker.emqx.io:1883
-[A7670E] Subscribed to: pv/device_001/control
-[POWER] V=239.2V I=0mA P=0.0W
-```
 
-`MQTT connected` and `Subscribed to` confirm a successful MQTT session.
+Each MQTT client must use a unique Client ID. Do not reuse the same Client ID in STM32, Node-RED, and MQTTX; otherwise EMQX may disconnect one client with `Session taken over`.
 
-### 4.3 Verify Data Publishing
-On another computer, use an MQTT client (e.g., MQTTX) to subscribe to `pv/device_001/data`. You should receive JSON payloads:
+## Published Payload
+
+The current firmware payload includes active power, apparent power, and power factor:
 
 ```json
 {
   "device_id": "device_001",
-  "voltage": 239.2,
-  "current": 0.0,
-  "power": 0.0,
-  "status": 1,
-  "temperature": 31.6
+  "timestamp": 1550,
+  "voltage": 237.8,
+  "current": 1.23,
+  "power": 278,
+  "active_power": 278,
+  "apparent_power": 292.7,
+  "power_factor": 0.95,
+  "status": true,
+  "efficiency": 0.5,
+  "temperature": 30.8
 }
 ```
 
-## 5. Hardware Wiring Summary
+`power` is retained for backward compatibility and should be interpreted as active power.
 
-```
-STM32WB5MM-DK        A7670E 4G Module
-  PB5 (TX)  --------→  RXD
-  PC0 (RX)  ←--------  TXD
-  GND       ←-------→  GND
+## Expected Serial Logs
 
-Power: Both devices share a single DC 5V USB power source
+A normal power report looks like:
 
-STM32 Antenna: Built-in PCB antenna (integrated in STM32WB5MMG module)
-A7670E Antenna: External 4G wideband antenna (SMA connector)
-
-TOWSMR1-40 Breaker: Connected wirelessly via Zigbee, wired in series with 240V AC line
+```text
+[M4 APPLICATION] [POWER] V=237.2V I=1231mA P=277W S=292.0VA PF=0.95
+[M4 APPLICATION] [TEMP] DP=131 Raw=310 -> 31.0C
 ```
 
-## 6. Troubleshooting
+A normal MQTT upload sequence should show connection and publish success messages from the A7670E driver.
 
-| Issue | Solution |
-|-------|----------|
-| Zigbee pairing fails | Power cycle both STM32 and breaker, wait 60 seconds |
-| MQTT connection timeout | Check A7670E 4G antenna connection and SIM card data plan |
-| No serial output | Ensure USB is connected to ST-LINK port, baud rate set to 115200 |
-| Build errors | Verify STM32CubeIDE version ≥ 1.13 and Zigbee libraries are installed |
-| Re-pairing needed after power loss | Normal behavior — STM32 Zigbee state is not persisted across reboots |
+## Build and Flash
+
+1. Open STM32CubeIDE.
+2. Import the existing STM32 project from `Zigbee_OnOff_Server_Coord/STM32CubeIDE`.
+3. Build the project.
+4. Connect the STM32WB5MM-DK through ST-LINK USB.
+5. Flash and run the firmware.
+6. Open the serial terminal at the configured baud rate and verify Zigbee pairing and MQTT upload logs.
+
+## Hardware Notes
+
+- The STM32 board may be powered from a laptop USB port during testing.
+- If the laptop is only providing USB power, it is not part of the MQTT/cloud upload path.
+- Cloud upload still depends on the A7670E cellular connection and SIM data service.
+- If the SIM card has expired but data still arrives, it may be due to remaining balance, grace period, or temporary network allowance. Verify by powering the board independently and viewing Grafana from another device.
+
+## Troubleshooting
+
+| Symptom | Likely Cause | Check |
+|---------|--------------|-------|
+| No MQTT data in Node-RED | A7670E not registered or MQTT not connected | Antenna, SIM, APN, MQTT logs |
+| MQTTX or Node-RED disconnects | Duplicate MQTT Client ID | Use unique Client IDs |
+| Grafana shows no recent data | Cloud pipeline not writing to InfluxDB | Node-RED debug and InfluxDB token |
+| No active/apparent power fields | Old firmware payload | Rebuild and flash the updated firmware |
+| Zigbee data missing | Breaker not paired or Tuya EF00 not reporting | Pairing logs and breaker power |

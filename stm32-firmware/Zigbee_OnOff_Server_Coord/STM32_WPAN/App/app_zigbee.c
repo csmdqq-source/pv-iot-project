@@ -68,7 +68,7 @@
 
 #define MQTT_TOPIC          "pv/device_001/data"
 #define MQTT_DEVICE_ID      "device_001"
-#define MQTT_JSON_BUF_SIZE  256U
+#define MQTT_JSON_BUF_SIZE  512U
 #define MQTT_DEFAULT_EFFICIENCY_X10   5U    /* 0.5 */
 #define MQTT_DEFAULT_TEMPERATURE_X10 353U   /* 35.3 */
 
@@ -1536,18 +1536,28 @@ static void ParseTuya_PowerData(const uint8_t *data, uint8_t len)
   uint32_t power_w = ((uint32_t)data[5] << 16) |
                      ((uint32_t)data[6] << 8) |
                      data[7];
-  uint32_t power_x10 = APP_ZIGBEE_ComputePowerX10(voltage_raw, current_ma, power_w);
+  uint32_t apparent_power_x10 = APP_ZIGBEE_ComputePowerX10(voltage_raw, current_ma, power_w);
+  uint32_t power_factor_x100 = 0U;
+
+  if (apparent_power_x10 != 0U && power_w != 0U) {
+    power_factor_x100 = (uint32_t)((((uint64_t)power_w * 1000ULL) +
+                                    (apparent_power_x10 / 2U)) /
+                                   apparent_power_x10);
+  }
 
   /* save to global struct */
   zigbee_app_info.tuya_voltage_dv = voltage_raw;
   zigbee_app_info.tuya_current_ma = current_ma;
   zigbee_app_info.tuya_power_w = power_w;
 
-  APP_DBG("[POWER] V=%u.%uV I=%lumA P=%lu.%luW",
+  APP_DBG("[POWER] V=%u.%uV I=%lumA P=%luW S=%lu.%luVA PF=%lu.%02lu",
           voltage_raw / 10U, voltage_raw % 10U,
           (unsigned long)current_ma,
-          (unsigned long)(power_x10 / 10U),
-          (unsigned long)(power_x10 % 10U));
+          (unsigned long)power_w,
+          (unsigned long)(apparent_power_x10 / 10U),
+          (unsigned long)(apparent_power_x10 % 10U),
+          (unsigned long)(power_factor_x100 / 100U),
+          (unsigned long)(power_factor_x100 % 100U));
 
   /* 鏇存柊 LCD 鏄剧ず */
   APP_ZIGBEE_UpdatePowerDisplay();
@@ -1920,7 +1930,6 @@ static void APP_ZIGBEE_UpdatePowerDisplay(void)
 char line_voltage[20];
 char line_current[20];
 char line_power[20];
-uint32_t power_x10;
 
 // 娓呴櫎鏄剧ず
 BSP_LCD_Clear(LCD_Inst, SSD1315_COLOR_BLACK);
@@ -1942,12 +1951,8 @@ snprintf(line_current, sizeof(line_current), "I:%lu.%02luA",
 UTIL_LCD_DisplayStringAt(0, 32, (uint8_t*)line_current, CENTER_MODE);
 
 // 绗洓琛岋細鍔熺巼鏄剧ず锛堝崟浣嶏細W锛?
-power_x10 = APP_ZIGBEE_ComputePowerX10(zigbee_app_info.tuya_voltage_dv,
-                                       zigbee_app_info.tuya_current_ma,
-                                       zigbee_app_info.tuya_power_w);
-snprintf(line_power, sizeof(line_power), "P:%lu.%luW",
-         (unsigned long)(power_x10 / 10U),
-         (unsigned long)(power_x10 % 10U));
+snprintf(line_power, sizeof(line_power), "P:%luW",
+         (unsigned long)zigbee_app_info.tuya_power_w);
 UTIL_LCD_DisplayStringAt(0, 48, (uint8_t*)line_power, CENTER_MODE);
 
 // 鍒锋柊鏄剧ず
@@ -2112,13 +2117,16 @@ static void APP_ZIGBEE_MqttUploadJson(void)
   uint16_t voltage_raw = zigbee_app_info.tuya_voltage_dv;
   uint32_t current_ma = zigbee_app_info.tuya_current_ma;
   uint32_t power_w = zigbee_app_info.tuya_power_w;
-  uint32_t power_x10 = APP_ZIGBEE_ComputePowerX10(voltage_raw, current_ma, power_w);
+  uint32_t apparent_power_x10 = APP_ZIGBEE_ComputePowerX10(voltage_raw, current_ma, power_w);
   uint16_t voltage_int = voltage_raw / 10U;
   uint16_t voltage_dec = voltage_raw % 10U;
   uint32_t current_int = current_ma / 1000U;
   uint32_t current_dec = (current_ma % 1000U) / 10U; /* two decimals */
-  uint32_t power_int = power_x10 / 10U;
-  uint32_t power_dec = power_x10 % 10U;
+  uint32_t apparent_power_int = apparent_power_x10 / 10U;
+  uint32_t apparent_power_dec = apparent_power_x10 % 10U;
+  uint32_t power_factor_x100 = 0U;
+  uint32_t power_factor_int = 0U;
+  uint32_t power_factor_dec = 0U;
   uint32_t efficiency_int = MQTT_DEFAULT_EFFICIENCY_X10 / 10U;
   uint32_t efficiency_dec = MQTT_DEFAULT_EFFICIENCY_X10 % 10U;
   uint16_t temperature_x10 = zigbee_app_info.tuya_temperature_valid
@@ -2128,6 +2136,14 @@ static void APP_ZIGBEE_MqttUploadJson(void)
   uint32_t temperature_dec = temperature_x10 % 10U;
   bool status = zigbee_app_info.breaker_on;
   bool data_ready = (voltage_raw != 0U) || (current_ma != 0U) || (power_w != 0U);
+
+  if (apparent_power_x10 != 0U && power_w != 0U) {
+    power_factor_x100 = (uint32_t)((((uint64_t)power_w * 1000ULL) +
+                                    (apparent_power_x10 / 2U)) /
+                                   apparent_power_x10);
+    power_factor_int = power_factor_x100 / 100U;
+    power_factor_dec = power_factor_x100 % 100U;
+  }
 
   if (!data_ready) {
     if (!no_data_logged) {
@@ -2154,12 +2170,17 @@ static void APP_ZIGBEE_MqttUploadJson(void)
   int n = snprintf(json, sizeof(json),
                    "{\"device_id\":\"%s\",\"timestamp\":%lu,"
                    "\"voltage\":%u.%u,\"current\":%lu.%02lu,"
-                   "\"power\":%lu.%lu,\"status\":%s,"
+                   "\"power\":%lu,\"active_power\":%lu,"
+                   "\"apparent_power\":%lu.%lu,\"power_factor\":%lu.%02lu,"
+                   "\"status\":%s,"
                    "\"efficiency\":%lu.%lu,\"temperature\":%lu.%lu}",
                    MQTT_DEVICE_ID, (unsigned long)ts,
                    voltage_int, voltage_dec,
                    (unsigned long)current_int, (unsigned long)current_dec,
-                   (unsigned long)power_int, (unsigned long)power_dec,
+                   (unsigned long)power_w,
+                   (unsigned long)power_w,
+                   (unsigned long)apparent_power_int, (unsigned long)apparent_power_dec,
+                   (unsigned long)power_factor_int, (unsigned long)power_factor_dec,
                    status ? "true" : "false",
                    (unsigned long)efficiency_int, (unsigned long)efficiency_dec,
                    (unsigned long)temperature_int, (unsigned long)temperature_dec);
